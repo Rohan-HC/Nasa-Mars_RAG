@@ -8,9 +8,19 @@ DB_PATH = "data/chroma"
 COLLECTION = "nasa_mars_uploads"
 
 
-def search_nasa(question: str):
-    if not question.strip():
+def search_nasa(
+    question: str,
+    k: int = 3,
+    filename: str | None = None,
+    sha256: str | None = None,
+):
+    question = question.strip()
+
+    if not question:
         raise ValueError("Question must not be empty")
+
+    if k < 1:
+        raise ValueError("k must be at least 1")
 
     if not Path(DB_PATH).exists():
         raise FileNotFoundError("NASA vector database not found")
@@ -23,8 +33,24 @@ def search_nasa(question: str):
         persist_directory=DB_PATH,
     )
 
+    filters = [{"section": "content"}]
+
+    if filename:
+        filters.append({"filename": filename})
+
+    if sha256:
+        filters.append({"sha256": sha256})
+
+    metadata_filter = (
+        filters[0]
+        if len(filters) == 1
+        else {"$and": filters}
+    )
+
     results = vector_store.similarity_search_with_score(
-        question, k=3, filter={"section": "content"}
+        question,
+        k=k,
+        filter=metadata_filter,
     )
 
     return results
