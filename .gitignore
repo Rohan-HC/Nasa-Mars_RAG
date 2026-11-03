@@ -1,0 +1,25 @@
+
+# Python virtual environments
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Local NASA research data
+data/raw/
+data/uploads/
+data/chroma/
+*.pdf
+
+# Editor and OS files
+.vscode/
+.DS_Store
+Thumbs.db

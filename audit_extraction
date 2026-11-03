@@ -1,0 +1,25 @@
+from pathlib import Path
+import pymupdf
+
+pdf_path = Path("data/raw/mars_report.pdf")
+
+output_dir = Path("data/extracted")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+with pymupdf.open(pdf_path) as document:
+    for page_number, page in enumerate(document, start=1):
+
+        original = page.get_text("text", sort=False)
+        sorted_text = page.get_text("text", sort=True)
+
+        (output_dir / f"page_{page_number}_original.txt").write_text(
+            original, encoding="utf-8"
+        )
+
+        (output_dir / f"page_{page_number}_sorted.txt").write_text(
+            sorted_text, encoding="utf-8"
+        )
+
+        print(f"Page {page_number}")
+        print(f"Original characters: {len(original)}")
+        print(f"Sorted characters: {len(sorted_text)}")
