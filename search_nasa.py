@@ -23,7 +23,9 @@ def search_nasa(question: str):
         persist_directory=DB_PATH,
     )
 
-    results = vector_store.similarity_search_with_score(question, k=3)
+    results = vector_store.similarity_search_with_score(
+        question, k=3, filter={"section": "content"}
+    )
 
     return results
 
