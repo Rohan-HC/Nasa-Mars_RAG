@@ -70,7 +70,11 @@ def answer_question(question: str):
         "retrieved": [
             {
                 "label": index,
-                "title": document.metadata.get("title"),
+                "title": (
+                    document.metadata.get("title")
+                    or document.metadata.get("filename")
+                    or "Unknown document"
+                ),
                 "page": document.metadata.get("page"),
                 "distance": distance,
                 "text": document.page_content,
@@ -102,4 +106,12 @@ if __name__ == "__main__":
 
     assert cited_ids.issubset(valid_ids), (
         "The answer cites a passage that was not retrieved."
+    )
+
+
+def get_source_title(document):
+    return (
+        document.metadata.get("title")
+        or document.metadata.get("filename")
+        or "Unknown document"
     )
