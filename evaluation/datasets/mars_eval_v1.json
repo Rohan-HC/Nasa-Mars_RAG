@@ -1,0 +1,198 @@
+{
+  "dataset_version": "1.0",
+  "description": "Twenty source-verified cases derived from three locally indexed NASA Mars documents. Expected concepts were checked against the cited PDF pages; the PDFs themselves remain excluded from Git.",
+  "cases": [
+    {
+      "id": "fact-01",
+      "question": "Which minerals formed through aqueous alteration in the Jezero crater-floor rocks?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "required_concepts": [["carbonate"], ["iron oxides", "iron oxide"], ["sulfates", "sulfate"]],
+      "source_references": [{"document_sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "filename": "mars_report.pdf", "pages": [1]}],
+      "verification_note": "Page 1 lists carbonate, iron oxides, amorphous silicates, sulfates, halite, perchlorates, phosphates, and potential phyllosilicates."
+    },
+    {
+      "id": "fact-02",
+      "question": "What were the first two rock cores acquired in the Rochette caprock member?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "required_concepts": [["Montdenier"], ["Montagnac"]],
+      "source_references": [{"document_sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "filename": "mars_report.pdf", "pages": [1]}],
+      "verification_note": "Page 1 names Montdenier and Montagnac as the first two rock cores."
+    },
+    {
+      "id": "fact-03",
+      "question": "How did the crater-floor overview interpret the igneous origin of the Seitah rocks?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "required_concepts": [["olivine-rich", "olivine rich"], ["cumulate"]],
+      "source_references": [{"document_sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "filename": "mars_report.pdf", "pages": [1]}],
+      "verification_note": "Page 1 describes Seitah as an olivine-rich cumulate."
+    },
+    {
+      "id": "fact-04",
+      "question": "Which primary minerals characterize the Maaz formation rocks in the crater-floor overview?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "required_concepts": [["pyroxene"], ["plagioclase"]],
+      "source_references": [{"document_sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "filename": "mars_report.pdf", "pages": [1]}],
+      "verification_note": "Page 1 says Maaz rocks are rich in pyroxene and plagioclase."
+    },
+    {
+      "id": "fact-05",
+      "question": "As of January 1, 2022, how far had Perseverance traversed and how many sample tubes had it filled?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "required_concepts": [["2.886 km", "2.886 kilometers"], ["6 sample tubes", "six sample tubes"]],
+      "source_references": [{"document_sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "filename": "mars_report.pdf", "pages": [1]}],
+      "verification_note": "Page 1 reports 2.886 km and six filled sample tubes."
+    },
+    {
+      "id": "fact-06",
+      "question": "What depositional processes did the delta-front overview infer for most lithofacies?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "required_concepts": [["turbidite", "turbidity currents"], ["sediment-gravity flows", "sediment gravity flows", "density currents"]],
+      "source_references": [{"document_sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd", "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf", "pages": [2]}],
+      "verification_note": "Page 2 attributes deposition to broadly unconfined density currents and turbidite-related processes."
+    },
+    {
+      "id": "fact-07",
+      "question": "What rock types occur in the lowest members of Devils Tanyard and Hughes River Gap?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "required_concepts": [["sandstone"], ["siltstone"]],
+      "source_references": [{"document_sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd", "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf", "pages": [2]}],
+      "verification_note": "Page 2 describes interbedded very fine-to-medium sandstones and inferred siltstone."
+    },
+    {
+      "id": "fact-08",
+      "question": "What is unique about the Hogwallow Flats unit in the reported stratigraphy?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "required_concepts": [["hydrated"], ["sulfate-cemented", "sulfate cemented"], ["siltstone"]],
+      "source_references": [{"document_sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd", "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf", "pages": [2]}],
+      "verification_note": "Page 2 calls Hogwallow Flats a hydrated sulfate-cemented siltstone."
+    },
+    {
+      "id": "fact-09",
+      "question": "What corridor width did the geologic context mapping document along Perseverance's traverse?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "required_concepts": [["120 m", "120-m", "120 meter", "120-meter"]],
+      "source_references": [{"document_sha256": "94fd68b2d3ea9f569c8f7b068a18e0d8272fafefad79d0c6640f27c365d79657", "filename": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf", "pages": [1]}],
+      "verification_note": "The page 1 abstract specifies a 120 m-wide corridor."
+    },
+    {
+      "id": "multi-01",
+      "question": "What alteration products and environmental significance were reported for the crater-floor rocks?",
+      "category": "multi_evidence",
+      "expected_behavior": "answer",
+      "required_concepts": [["carbonate"], ["iron oxides", "iron oxide"], ["habitable environments", "habitable"]],
+      "source_references": [{"document_sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "filename": "mars_report.pdf", "pages": [1, 2]}],
+      "verification_note": "The alteration list begins on page 1 and its environmental interpretation continues on page 2."
+    },
+    {
+      "id": "multi-02",
+      "question": "Which different features support aqueous alteration and diagenesis in the delta-front sections?",
+      "category": "multi_evidence",
+      "expected_behavior": "answer",
+      "required_concepts": [["anhydrite"], ["Mn-rich", "manganese-rich", "manganese rich"], ["concretions"]],
+      "source_references": [{"document_sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd", "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf", "pages": [2]}],
+      "verification_note": "Page 2 lists anhydrite veins, Mn-rich coatings, and spherical or irregular concretions among several indicators."
+    },
+    {
+      "id": "multi-03",
+      "question": "Which imaging, contact-science, and remote-sensing instruments supported rover-based geologic mapping?",
+      "category": "multi_evidence",
+      "expected_behavior": "answer",
+      "required_concepts": [["Mastcam-Z", "Mastcam Z"], ["Navcam", "Navigation cameras"], ["SHERLOC"], ["PIXL"], ["SuperCam"]],
+      "source_references": [{"document_sha256": "94fd68b2d3ea9f569c8f7b068a18e0d8272fafefad79d0c6640f27c365d79657", "filename": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf", "pages": [3]}],
+      "verification_note": "Page 3 names Mastcam-Z and Navcams for map bases and SHERLOC, PIXL, and SuperCam for lithologic confirmation."
+    },
+    {
+      "id": "multi-04",
+      "question": "How do mapping confidence Levels 5 and 1 differ in range, detail, and reliability?",
+      "category": "multi_evidence",
+      "expected_behavior": "answer",
+      "required_concepts": [["Level 5"], ["7.5 m", "7.5-meter", "7.5 meter"], ["Level 1"], ["dashed line", "low fidelity", "decrease in reliability"]],
+      "source_references": [{"document_sha256": "94fd68b2d3ea9f569c8f7b068a18e0d8272fafefad79d0c6640f27c365d79657", "filename": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf", "pages": [4, 5, 6]}],
+      "verification_note": "Pages 4-5 define Level 5 and its under-7.5 m range; pages 5-6 describe Level 1 as low-fidelity dashed-line inference."
+    },
+    {
+      "id": "compare-01",
+      "question": "Compare the interpreted origins of the crater-floor formations with the delta-front rocks.",
+      "category": "document_comparison",
+      "expected_behavior": "answer",
+      "required_concepts": [["igneous"], ["sedimentary"], ["turbidite", "turbidity currents", "density currents"]],
+      "source_references": [
+        {"document_sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "filename": "mars_report.pdf", "pages": [1]},
+        {"document_sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd", "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf", "pages": [2]}
+      ],
+      "document_hashes": ["f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd"],
+      "verification_note": "Crater page 1 reports igneous origins; delta page 2 reports sedimentary deposition by density-current/turbidite processes."
+    },
+    {
+      "id": "compare-02",
+      "question": "Compare the aqueous alteration evidence reported for the crater floor and delta front.",
+      "category": "document_comparison",
+      "expected_behavior": "answer",
+      "required_concepts": [["carbonate"], ["iron oxides", "iron oxide"], ["anhydrite"], ["concretions"]],
+      "source_references": [
+        {"document_sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "filename": "mars_report.pdf", "pages": [1]},
+        {"document_sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd", "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf", "pages": [2]}
+      ],
+      "document_hashes": ["f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd"],
+      "verification_note": "Crater page 1 lists carbonate and iron oxides; delta page 2 lists anhydrite veins, concretions, and other alteration features."
+    },
+    {
+      "id": "compare-03",
+      "question": "Compare unsuccessful or compromised sampling attempts described in the crater-floor and delta-front campaigns.",
+      "category": "document_comparison",
+      "expected_behavior": "answer",
+      "required_concepts": [["Roubion"], ["no rock", "no rock was acquired", "crumbly"], ["Rose River Falls", "Elkwallow Gap"], ["unsuitable"]],
+      "source_references": [
+        {"document_sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "filename": "mars_report.pdf", "pages": [1]},
+        {"document_sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd", "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf", "pages": [2]}
+      ],
+      "document_hashes": ["f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd"],
+      "verification_note": "Crater page 1 describes the failed Roubion acquisition; delta page 2 describes fractured or tilted abrasion targets unsuitable for coring."
+    },
+    {
+      "id": "unanswerable-01",
+      "question": "What exact air temperature did Perseverance measure at the instant it landed in Jezero crater?",
+      "category": "unanswerable",
+      "expected_behavior": "refuse",
+      "required_concepts": [],
+      "source_references": [],
+      "verification_note": "The three benchmark documents do not state an exact landing-time air temperature."
+    },
+    {
+      "id": "unanswerable-02",
+      "question": "What was the rover's battery voltage during the first crater-floor drilling attempt?",
+      "category": "unanswerable",
+      "expected_behavior": "refuse",
+      "required_concepts": [],
+      "source_references": [],
+      "verification_note": "The three benchmark documents do not report battery voltage for that activity."
+    },
+    {
+      "id": "hallucination-01",
+      "question": "Which living microbes did Perseverance discover in the Jezero samples?",
+      "category": "hallucination_prone",
+      "expected_behavior": "refuse",
+      "required_concepts": [],
+      "source_references": [],
+      "verification_note": "The question contains a false premise; none of the documents reports discovery of living microbes."
+    },
+    {
+      "id": "hallucination-02",
+      "question": "What single confirmed mechanism tilted the Artuby ridge layers to their current orientation?",
+      "category": "hallucination_prone",
+      "expected_behavior": "answer",
+      "required_concepts": [["undetermined", "not determined", "unknown"], ["ongoing study", "still being studied"]],
+      "source_references": [{"document_sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5", "filename": "mars_report.pdf", "pages": [2]}],
+      "verification_note": "Page 2 explicitly says the post-emplacement processes are yet undetermined and the relationship is an ongoing study."
+    }
+  ]
+}
