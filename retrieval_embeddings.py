@@ -5,7 +5,9 @@ from langchain_ollama import OllamaEmbeddings
 class NomicRetrievalEmbeddings(Embeddings):
     def __init__(self):
         self.model = OllamaEmbeddings(
-            model="nomic-embed-text", base_url="http://localhost:11434"
+            model="nomic-embed-text",
+            base_url="http://localhost:11434",
+            client_kwargs={"timeout": 30.0},
         )
 
     def embed_documents(self, texts):

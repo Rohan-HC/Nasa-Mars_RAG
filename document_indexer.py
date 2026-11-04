@@ -96,8 +96,10 @@ def index_uploaded_pdf(
             "chunks": len(chunks),
         }
 
-    if existing_ids:
-        store.delete(ids=list(existing_ids))
+    conflicting_ids = existing_ids & expected_ids
+    stale_ids = existing_ids - expected_ids
+    if conflicting_ids:
+        store.delete(ids=list(conflicting_ids))
 
     try:
         store.add_documents(documents=chunks, ids=ids)
@@ -105,6 +107,8 @@ def index_uploaded_pdf(
         saved_ids = set(store.get(ids=ids, include=[])["ids"])
         if saved_ids != expected_ids:
             raise RuntimeError("Indexed chunk IDs do not match expected IDs")
+        if stale_ids:
+            store.delete(ids=list(stale_ids))
     except Exception:
         try:
             store.delete(ids=ids)

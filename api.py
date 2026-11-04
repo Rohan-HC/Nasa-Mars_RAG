@@ -1,31 +1,150 @@
 import hashlib
 import logging
 from pathlib import Path
+from time import perf_counter
 from uuid import uuid4
 
 import pymupdf
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from compare_nasa import compare_campaigns
 from document_catalog import list_documents
 from document_comparison import compare_documents
 from document_indexer import index_uploaded_pdf
-
-logger = logging.getLogger(__name__)
+from health_checks import check_readiness
+from logging_config import configure_logging
 from rag_nasa import answer_question
-from pathlib import Path
-from fastapi.responses import FileResponse
+from service_errors import IndexingFailedError, ServiceError
+
+configure_logging()
+logger = logging.getLogger(__name__)
 
 
 class CompareRequest(BaseModel):
-    question: str
+    question: str = Field(min_length=1, max_length=1000)
 
 
 app = FastAPI(
     title="NASA Mars RAG API",
-    version="0.1.0",
+    version="0.2.0",
 )
+
+
+def _request_id(request: Request) -> str:
+    return getattr(request.state, "request_id", uuid4().hex)
+
+
+def _error_response(
+    request: Request,
+    *,
+    status_code: int,
+    code: str,
+    message: str,
+) -> JSONResponse:
+    request_id = _request_id(request)
+    response = JSONResponse(
+        status_code=status_code,
+        content={
+            "error": {
+                "code": code,
+                "message": message,
+                "request_id": request_id,
+            }
+        },
+    )
+    response.headers["X-Request-ID"] = request_id
+    return response
+
+
+@app.middleware("http")
+async def observe_request(request: Request, call_next):
+    request_id = uuid4().hex
+    request.state.request_id = request_id
+    started = perf_counter()
+    response = await call_next(request)
+    duration_ms = round((perf_counter() - started) * 1000, 2)
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Response-Time-Ms"] = str(duration_ms)
+    logger.info(
+        "request_complete",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+        },
+    )
+    return response
+
+
+@app.exception_handler(ServiceError)
+async def service_error_handler(request: Request, error: ServiceError):
+    logger.warning(
+        "service_error",
+        extra={
+            "request_id": _request_id(request),
+            "error_code": error.code,
+            "error_type": type(error).__name__,
+        },
+    )
+    return _error_response(
+        request,
+        status_code=error.status_code,
+        code=error.code,
+        message=error.message,
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_error_handler(request: Request, error: HTTPException):
+    codes = {
+        404: "not_found",
+        413: "payload_too_large",
+        415: "unsupported_media_type",
+        422: "validation_error",
+        503: "service_unavailable",
+    }
+    return _error_response(
+        request,
+        status_code=error.status_code,
+        code=codes.get(error.status_code, "request_error"),
+        message=str(error.detail),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(
+    request: Request,
+    error: RequestValidationError,
+):
+    return _error_response(
+        request,
+        status_code=422,
+        code="validation_error",
+        message="Request validation failed",
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_error_handler(request: Request, error: Exception):
+    logger.error(
+        "unexpected_error",
+        extra={
+            "request_id": _request_id(request),
+            "error_code": "internal_error",
+            "error_type": type(error).__name__,
+        },
+    )
+    return _error_response(
+        request,
+        status_code=500,
+        code="internal_error",
+        message="An unexpected server error occurred",
+    )
 
 
 @app.post("/compare/campaigns")
@@ -44,7 +163,7 @@ def compare_nasa_campaigns(request: CompareRequest):
 class CompareDocumentsRequest(BaseModel):
     document_a: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
     document_b: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
-    question: str = Field(min_length=1)
+    question: str = Field(min_length=1, max_length=1000)
 
 
 @app.post("/compare/documents")
@@ -100,8 +219,19 @@ class AskRequest(BaseModel):
 
 
 @app.get("/health")
-def health():
+@app.get("/health/live")
+def liveness():
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def readiness():
+    result = check_readiness()
+    status = "ready" if result["ready"] else "not_ready"
+    return JSONResponse(
+        status_code=200 if result["ready"] else 503,
+        content={"status": status, **result},
+    )
 
 
 @app.post("/ask")
@@ -181,20 +311,22 @@ def upload_document(file: UploadFile = File(...)):
         )
 
     except ValueError as error:
+        destination.unlink(missing_ok=True)
         raise HTTPException(
             status_code=422,
             detail=str(error),
         ) from error
 
     except Exception as error:
-        logger.exception(
-            "Failed to index uploaded PDF %s",
-            document_id,
+        destination.unlink(missing_ok=True)
+        logger.error(
+            "indexing_failed",
+            extra={"error_type": type(error).__name__},
         )
-        raise HTTPException(
-            status_code=503,
-            detail="PDF saved, but indexing failed",
-        ) from error
+        raise IndexingFailedError() from error
+
+    if index_result["status"] == "already_indexed":
+        destination.unlink(missing_ok=True)
 
     return {
         "document_id": document_id,

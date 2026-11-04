@@ -4,10 +4,11 @@ from document_indexer import INDEX_VERSION, index_uploaded_pdf
 
 
 class FakeStore:
-    def __init__(self, existing_ids=()):
+    def __init__(self, existing_ids=(), fail_on_add=False):
         self.ids = set(existing_ids)
         self.added_documents = []
         self.deleted_ids = []
+        self.fail_on_add = fail_on_add
 
     def get(self, *, where=None, ids=None, include=None):
         if ids is not None:
@@ -17,6 +18,8 @@ class FakeStore:
     def add_documents(self, *, documents, ids):
         self.added_documents.extend(documents)
         self.ids.update(ids)
+        if self.fail_on_add:
+            raise RuntimeError("embedding service unavailable")
 
     def delete(self, *, ids):
         self.deleted_ids.extend(ids)
@@ -54,3 +57,26 @@ def test_indexer_replaces_stale_chunks_and_preserves_source_metadata(pdf_file):
     assert store.added_documents[0].metadata["filename"] == "mars.pdf"
     assert store.added_documents[0].metadata["section"] == "content"
     assert store.added_documents[0].metadata["sha256"] == file_hash
+
+
+def test_failed_reindex_preserves_previous_version_and_removes_partial_new_ids(
+    pdf_file,
+):
+    file_hash = "c" * 64
+    stale_id = f"{file_hash}:v1:1"
+    expected_id = f"{file_hash}:{INDEX_VERSION}:1"
+    store = FakeStore(existing_ids=[stale_id], fail_on_add=True)
+
+    with (
+        patch("document_indexer.Chroma", return_value=store),
+        patch("document_indexer.NomicRetrievalEmbeddings", return_value=object()),
+    ):
+        try:
+            index_uploaded_pdf(pdf_file, file_hash, "mars.pdf")
+        except RuntimeError as error:
+            assert str(error) == "embedding service unavailable"
+        else:
+            raise AssertionError("Expected indexing failure")
+
+    assert stale_id in store.ids
+    assert expected_id not in store.ids

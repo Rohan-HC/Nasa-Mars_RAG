@@ -1,6 +1,12 @@
+import logging
+from time import perf_counter
+
 from search_nasa import search_nasa
 from rag_nasa import llm
-from comparison_checks import validate_comparison_response
+from comparison_checks import validate_comparison, validate_comparison_response
+from rag_runtime import invoke_model, retrieve
+
+logger = logging.getLogger(__name__)
 
 
 SEARCHES = [
@@ -83,21 +89,46 @@ Comparison:
 
 
 def compare_campaigns(question: str) -> dict:
+    total_started = perf_counter()
     all_results = []
+    retrieval_ms = 0.0
 
     # Step 1: Retrieve from each required document
     for search in SEARCHES:
-        results = search_nasa(
+        retrieval_started = perf_counter()
+        results = retrieve(
+            search_nasa,
             question=search["question"],
             k=search["k"],
             filename=search["filename"],
         )
+        retrieval_ms += (perf_counter() - retrieval_started) * 1000
 
         if not results:
-            return {
+            result = {
                 "answer": "Insufficient evidence for comparison.",
                 "retrieved": [],
+                "validation": validate_comparison(
+                    {
+                        "answer": "Insufficient evidence for comparison.",
+                        "retrieved": [],
+                    }
+                ),
+                "timings_ms": {
+                    "retrieval": round(retrieval_ms, 2),
+                    "model": 0.0,
+                    "total": round((perf_counter() - total_started) * 1000, 2),
+                },
             }
+            logger.info(
+                "campaign_comparison_complete",
+                extra={
+                    "retrieval_ms": result["timings_ms"]["retrieval"],
+                    "model_ms": result["timings_ms"]["model"],
+                    "duration_ms": result["timings_ms"]["total"],
+                },
+            )
+            return result
 
         all_results.extend(results)
 
@@ -129,17 +160,37 @@ def compare_campaigns(question: str) -> dict:
     # Step 3: Create an augmented prompt
     user_prompt = f"Evidence:\n{context}\n\nQuestion: {question}"
 
-    response = llm.invoke(
+    model_started = perf_counter()
+    response = invoke_model(
+        llm,
         [
             ("system", COMPARISON_SYSTEM_PROMPT),
             ("human", user_prompt),
-        ]
+        ],
     )
+    model_ms = (perf_counter() - model_started) * 1000
 
-    return {
+    result = {
         "answer": response.content,
         "retrieved": sources,
+        "timings_ms": {
+            "retrieval": round(retrieval_ms, 2),
+            "model": round(model_ms, 2),
+            "total": round((perf_counter() - total_started) * 1000, 2),
+        },
     }
+    result["validation"] = validate_comparison(result)
+    if not result["validation"]["citation_valid"]:
+        result["answer"] = "Insufficient evidence for a reliable comparison."
+    logger.info(
+        "campaign_comparison_complete",
+        extra={
+            "retrieval_ms": result["timings_ms"]["retrieval"],
+            "model_ms": result["timings_ms"]["model"],
+            "duration_ms": result["timings_ms"]["total"],
+        },
+    )
+    return result
 
 
 if __name__ == "__main__":

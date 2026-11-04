@@ -275,7 +275,9 @@ Compare the geological findings of these two documents.
 
                 if (!response.ok) {
                     throw new Error(
-                        typeof data.detail === "string"
+                        typeof data.error?.message === "string"
+                            ? data.error.message
+                            : typeof data.detail === "string"
                             ? data.detail
                             : `Request failed (${response.status})`
                     );
@@ -353,7 +355,9 @@ Compare the geological findings of these two documents.
 
                 if (!response.ok) {
                     throw new Error(
-                        typeof data.detail === "string"
+                        typeof data.error?.message === "string"
+                            ? data.error.message
+                            : typeof data.detail === "string"
                             ? data.detail
                             : `Request failed (${response.status})`
                     );
@@ -424,7 +428,9 @@ Compare the geological findings of these two documents.
 
                 if (!response.ok) {
                     throw new Error(
-                        typeof data.detail === "string"
+                        typeof data.error?.message === "string"
+                            ? data.error.message
+                            : typeof data.detail === "string"
                             ? data.detail
                             : `Upload failed (${response.status})`
                     );

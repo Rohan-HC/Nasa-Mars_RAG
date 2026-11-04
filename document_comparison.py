@@ -1,7 +1,13 @@
+import logging
+from time import perf_counter
+
 from document_catalog import list_documents
 from search_nasa import search_nasa
 from rag_nasa import llm
 from comparison_checks import validate_comparison
+from rag_runtime import invoke_model, retrieve
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """
@@ -34,6 +40,7 @@ def compare_documents(
     document_a: str,
     document_b: str,
 ) -> dict:
+    total_started = perf_counter()
 
     question = question.strip()
     document_a = document_a.lower()
@@ -52,6 +59,7 @@ def compare_documents(
 
     context_parts = []
     sources = []
+    retrieval_ms = 0.0
 
     for role, file_hash in zip(
         ("A", "B"),
@@ -59,17 +67,35 @@ def compare_documents(
     ):
         filename = catalog[file_hash]["filename"]
 
-        results = search_nasa(
+        retrieval_started = perf_counter()
+        results = retrieve(
+            search_nasa,
             question=question,
             k=2,
             sha256=file_hash,
         )
+        retrieval_ms += (perf_counter() - retrieval_started) * 1000
 
         if not results:
-            return {
+            result = {
                 "answer": "Insufficient evidence for comparison.",
                 "retrieved": [],
+                "timings_ms": {
+                    "retrieval": round(retrieval_ms, 2),
+                    "model": 0.0,
+                    "total": round((perf_counter() - total_started) * 1000, 2),
+                },
             }
+            result["validation"] = validate_comparison(result)
+            logger.info(
+                "comparison_complete",
+                extra={
+                    "retrieval_ms": result["timings_ms"]["retrieval"],
+                    "model_ms": result["timings_ms"]["model"],
+                    "duration_ms": result["timings_ms"]["total"],
+                },
+            )
+            return result
 
         for document, distance in results:
             label = f"S{len(sources) + 1}"
@@ -105,20 +131,36 @@ def compare_documents(
         "Source labels identify passages, not documents."
     )
 
-    response = llm.invoke(
+    model_started = perf_counter()
+    response = invoke_model(
+        llm,
         [
             ("system", SYSTEM_PROMPT),
             ("human", user_prompt),
-        ]
+        ],
     )
+    model_ms = (perf_counter() - model_started) * 1000
 
     result = {
         "answer": response.content,
         "retrieved": sources,
+        "timings_ms": {
+            "retrieval": round(retrieval_ms, 2),
+            "model": round(model_ms, 2),
+            "total": round((perf_counter() - total_started) * 1000, 2),
+        },
     }
 
     result["validation"] = validate_comparison(result)
     if not result["validation"]["citation_valid"]:
         result["answer"] = "Insufficient evidence for a reliable comparison."
+    logger.info(
+        "comparison_complete",
+        extra={
+            "retrieval_ms": result["timings_ms"]["retrieval"],
+            "model_ms": result["timings_ms"]["model"],
+            "duration_ms": result["timings_ms"]["total"],
+        },
+    )
 
     return result

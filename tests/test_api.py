@@ -11,7 +11,7 @@ HASH_B = "b" * 64
 
 
 def test_liveness_does_not_require_external_services():
-    response = TestClient(api.app).get("/health")
+    response = TestClient(api.app).get("/health/live")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -46,6 +46,45 @@ def test_compare_rejects_unknown_document_without_model_call():
     compare_documents.assert_not_called()
 
 
+def test_campaign_comparison_rejects_oversized_question():
+    with patch("api.compare_campaigns") as compare_campaigns:
+        response = TestClient(api.app).post(
+            "/compare/campaigns",
+            json={"question": "x" * 1001},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    compare_campaigns.assert_not_called()
+
+
+def test_document_comparison_rejects_oversized_question():
+    hash_a = "a" * 64
+    hash_b = "b" * 64
+    with (
+        patch(
+            "api.list_documents",
+            return_value=[
+                {"sha256": hash_a, "filename": "a.pdf"},
+                {"sha256": hash_b, "filename": "b.pdf"},
+            ],
+        ),
+        patch("api.compare_documents") as compare_documents,
+    ):
+        response = TestClient(api.app).post(
+            "/compare/documents",
+            json={
+                "document_a": hash_a,
+                "document_b": hash_b,
+                "question": "x" * 1001,
+            },
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    compare_documents.assert_not_called()
+
+
 def test_upload_rejects_malformed_pdf_and_removes_temporary_file(tmp_path):
     with patch.object(api, "UPLOAD_DIR", tmp_path):
         response = TestClient(api.app).post(
@@ -54,7 +93,9 @@ def test_upload_rejects_malformed_pdf_and_removes_temporary_file(tmp_path):
         )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "Uploaded file is not a readable PDF"
+    assert response.json()["error"]["message"] == (
+        "Uploaded file is not a readable PDF"
+    )
     assert list(tmp_path.iterdir()) == []
 
 
