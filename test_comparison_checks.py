@@ -51,6 +51,16 @@ class TestComparisonChecks(unittest.TestCase):
             errors,
         )
 
+    def test_substantive_answer_without_citations(self):
+        response = {
+            "answer": "The campaigns have different geological origins.",
+            "retrieved": self.sources,
+        }
+
+        errors = validate_comparison_response(response)
+
+        self.assertIn("Substantive answer is missing citations", errors)
+
     def test_grouped_citations(self):
         response = {
             "answer": "Both campaigns differ [S1, S3].",

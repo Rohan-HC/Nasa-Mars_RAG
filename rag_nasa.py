@@ -1,4 +1,5 @@
 from langchain_ollama import ChatOllama
+from citation_validation import validate_citations
 from search_nasa import search_nasa
 
 
@@ -34,10 +35,14 @@ def answer_question(question: str):
     results = search_nasa(question)
 
     if not results:
-        return {
+        result = {
             "answer": "I cannot answer this from the available NASA documents.",
             "retrieved": [],
         }
+        result["validation"] = validate_citations(
+            result["answer"], result["retrieved"], style="numeric"
+        )
+        return result
 
     # Step 2: Construct evidence context
     context_parts = []
@@ -65,7 +70,7 @@ def answer_question(question: str):
         ]
     )
 
-    return {
+    result = {
         "answer": response.content,
         "retrieved": [
             {
@@ -82,6 +87,12 @@ def answer_question(question: str):
             for index, (document, distance) in enumerate(results, start=1)
         ],
     }
+    result["validation"] = validate_citations(
+        result["answer"], result["retrieved"], style="numeric"
+    )
+    if not result["validation"]["citation_valid"]:
+        result["answer"] = "I cannot answer this from the available NASA documents."
+    return result
 
 
 if __name__ == "__main__":

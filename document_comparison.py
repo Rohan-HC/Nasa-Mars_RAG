@@ -1,7 +1,7 @@
 from document_catalog import list_documents
 from search_nasa import search_nasa
 from rag_nasa import llm
-from comparison_checks import validate_comparison_response
+from comparison_checks import validate_comparison
 
 
 SYSTEM_PROMPT = """
@@ -117,11 +117,8 @@ def compare_documents(
         "retrieved": sources,
     }
 
-    errors = validate_comparison_response(result)
-
-    result["validation"] = {
-        "passed": not errors,
-        "errors": errors,
-    }
+    result["validation"] = validate_comparison(result)
+    if not result["validation"]["citation_valid"]:
+        result["answer"] = "Insufficient evidence for a reliable comparison."
 
     return result

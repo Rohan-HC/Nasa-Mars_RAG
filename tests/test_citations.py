@@ -37,3 +37,12 @@ def test_answer_citation_check_rejects_nonexistent_source():
     }
 
     assert check_citations(result) is False
+
+
+def test_answer_citation_check_rejects_missing_citations():
+    result = {
+        "answer": "The rocks are igneous.",
+        "retrieved": [{"label": 1}],
+    }
+
+    assert check_citations(result) is False

@@ -1,0 +1,830 @@
+{
+  "metadata": {
+    "dataset": "evaluation\\datasets\\mars_eval_v1.json",
+    "execution_mode": "live",
+    "case_count": 20,
+    "k": 4,
+    "generated_at_utc": "2026-11-04T00:05:17.721912+00:00"
+  },
+  "summary": {
+    "retrieval_hit_at_k": 0.9412,
+    "source_recall_at_k": 0.9412,
+    "answer_correctness": 0.65,
+    "citation_validity": 0.85,
+    "evidence_support": 0.5882,
+    "correct_refusal": 1.0,
+    "mean_latency_seconds": 23.2616
+  },
+  "cases": [
+    {
+      "id": "fact-01",
+      "question": "Which minerals formed through aqueous alteration in the Jezero crater-floor rocks?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "answer": "The minerals formed through aqueous alteration in the Jezero crater-floor rocks include carbonate, iron oxides, amorphous silicates, sulfates, halite, perchlorates, phosphates, and potential phyllosilicates [1]. \n\nI cannot answer this from the available NASA documents.",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.48621833324432373
+        },
+        {
+          "label": 2,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.5235543251037598
+        },
+        {
+          "label": 3,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 39,
+          "distance": 0.5459085702896118
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": 1.0,
+        "evidence_supported": true,
+        "correct_refusal": null,
+        "latency_seconds": 13.8089
+      },
+      "error": null
+    },
+    {
+      "id": "fact-02",
+      "question": "What were the first two rock cores acquired in the Rochette caprock member?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "answer": "The first two rock cores acquired in the Rochette caprock member were Montdenier and Montagnac [1].",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.45334047079086304
+        },
+        {
+          "label": 2,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 34,
+          "distance": 0.5117276310920715
+        },
+        {
+          "label": 3,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 35,
+          "distance": 0.5379886627197266
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": 1.0,
+        "evidence_supported": true,
+        "correct_refusal": null,
+        "latency_seconds": 10.4542
+      },
+      "error": null
+    },
+    {
+      "id": "fact-03",
+      "question": "How did the crater-floor overview interpret the igneous origin of the Seitah rocks?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "answer": "The crater-floor overview interpreted the igneous origin of the S\u00e9\u00edtah rocks as follows: the S\u00e9\u00edtah rocks are igneous in origin, representing an olivine-rich cumulate formed from differentiation of an intrusive body or thick lava flow or impact melt. This is supported by the evidence in [1]. \n\nTherefore, the answer is: The crater-floor overview interpreted the igneous origin of the S\u00e9\u00edtah rocks as being from an olivine-rich cumulate formed from differentiation of an intrusive body or thick lava flow or impact melt.",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.3627702593803406
+        },
+        {
+          "label": 2,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 36,
+          "distance": 0.3667825758457184
+        },
+        {
+          "label": 3,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 35,
+          "distance": 0.3849949538707733
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": 1.0,
+        "evidence_supported": true,
+        "correct_refusal": null,
+        "latency_seconds": 15.8601
+      },
+      "error": null
+    },
+    {
+      "id": "fact-04",
+      "question": "Which primary minerals characterize the Maaz formation rocks in the crater-floor overview?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "answer": "The Maaz formation rocks in the crater-floor overview are characterized primarily by the near absence of olivine, as indicated by PIXL measurements. This is cited in [1]. \n\nI cannot answer this from the available NASA documents.",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 13,
+          "distance": 0.41885071992874146
+        },
+        {
+          "label": 2,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.4351233243942261
+        },
+        {
+          "label": 3,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 8,
+          "distance": 0.44681882858276367
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 0.0,
+        "answer_correct": false,
+        "citation_valid": true,
+        "evidence_support_score": 0.0,
+        "evidence_supported": false,
+        "correct_refusal": null,
+        "latency_seconds": 14.1335
+      },
+      "error": null
+    },
+    {
+      "id": "fact-05",
+      "question": "As of January 1, 2022, how far had Perseverance traversed and how many sample tubes had it filled?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "answer": "As of January 1, 2022, Perseverance had traversed 2.886 km and filled 6 sample tubes. This information is cited in [1].",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.4652669429779053
+        },
+        {
+          "label": 2,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 1,
+          "distance": 0.4803994596004486
+        },
+        {
+          "label": 3,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.5244438648223877
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": 1.0,
+        "evidence_supported": true,
+        "correct_refusal": null,
+        "latency_seconds": 14.6211
+      },
+      "error": null
+    },
+    {
+      "id": "fact-06",
+      "question": "What depositional processes did the delta-front overview infer for most lithofacies?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "answer": "The delta-front overview inferred that the most prevalent mode of sedimentary deposition in most lithofacies is by turbidite-related processes. These processes involve sediment-gravity flows moving down slope and depositing grains in relation to decreasing flow energy with distance [1].",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 2,
+          "distance": 0.37297147512435913
+        },
+        {
+          "label": 2,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 2,
+          "distance": 0.45361804962158203
+        },
+        {
+          "label": 3,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 1,
+          "distance": 0.5307000875473022
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": 1.0,
+        "evidence_supported": true,
+        "correct_refusal": null,
+        "latency_seconds": 12.223
+      },
+      "error": null
+    },
+    {
+      "id": "fact-07",
+      "question": "What rock types occur in the lowest members of Devils Tanyard and Hughes River Gap?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "answer": "The lowest members of Devils Tanyard and Hughes River Gap are interbedded very fine-to-medium sandstones and inferred siltstone. These rock types are cited in the evidence [1]. \n\nTherefore, the answer is:  \nThe lowest members of Devils Tanyard and Hughes River Gap include very fine-to-medium sandstones and inferred siltstone.",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 2,
+          "distance": 0.32210102677345276
+        },
+        {
+          "label": 2,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 2,
+          "distance": 0.6140477657318115
+        },
+        {
+          "label": 3,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 2,
+          "distance": 0.6273414492607117
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": 1.0,
+        "evidence_supported": true,
+        "correct_refusal": null,
+        "latency_seconds": 15.6691
+      },
+      "error": null
+    },
+    {
+      "id": "fact-08",
+      "question": "What is unique about the Hogwallow Flats unit in the reported stratigraphy?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "answer": "The Hogwallow Flats unit is unique in the stratigraphy because it is a hydrated sulfate-cemented siltstone. [1]",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 2,
+          "distance": 0.6378965973854065
+        },
+        {
+          "label": 2,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 2,
+          "distance": 0.6393654346466064
+        },
+        {
+          "label": 3,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 43,
+          "distance": 0.6676152348518372
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": 1.0,
+        "evidence_supported": true,
+        "correct_refusal": null,
+        "latency_seconds": 10.438
+      },
+      "error": null
+    },
+    {
+      "id": "fact-09",
+      "question": "What corridor width did the geologic context mapping document along Perseverance's traverse?",
+      "category": "factual_retrieval",
+      "expected_behavior": "answer",
+      "answer": "The corridor width documented in the geologic context mapping along Perseverance's traverse is 120 meters. This is stated in the abstract of the referenced document [2]. \n\nTherefore, the answer is: 120 meters.",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 44,
+          "distance": 0.4727437496185303
+        },
+        {
+          "label": 2,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 1,
+          "distance": 0.4727838933467865
+        },
+        {
+          "label": 3,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 7,
+          "distance": 0.47766172885894775
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": 1.0,
+        "evidence_supported": true,
+        "correct_refusal": null,
+        "latency_seconds": 14.3922
+      },
+      "error": null
+    },
+    {
+      "id": "multi-01",
+      "question": "What alteration products and environmental significance were reported for the crater-floor rocks?",
+      "category": "multi_evidence",
+      "expected_behavior": "answer",
+      "answer": "The alteration products reported for the crater-floor rocks include carbonate, iron oxides, amorphous silicates, sulfates, halite, perchlorates, phosphates, and potential phyllosilicates [1]. The environmental significance includes the presence of pervasive coatings on M\u00e1az and S\u00e9\u00edtah formation rocks, which suggest extensive aqueous alteration [1].",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.3997357487678528
+        },
+        {
+          "label": 2,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.5325061678886414
+        },
+        {
+          "label": 3,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 38,
+          "distance": 0.5520514845848083
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 0.6666666666666666,
+        "answer_correct": false,
+        "citation_valid": true,
+        "evidence_support_score": 0.6666666666666666,
+        "evidence_supported": false,
+        "correct_refusal": null,
+        "latency_seconds": 14.2334
+      },
+      "error": null
+    },
+    {
+      "id": "multi-02",
+      "question": "Which different features support aqueous alteration and diagenesis in the delta-front sections?",
+      "category": "multi_evidence",
+      "expected_behavior": "answer",
+      "answer": "The evidence indicates that features supporting aqueous alteration and diagenesis in the delta-front sections include:\n\n1. **Fracture-filling anhydrite veins and veinlets** [1].\n2. **Mn-rich rock coatings** [1].\n3. **Dust coatings** [1].\n4. **Spherical and irregular concretions** [1].\n5. **Serpentine spectral signatures** [1].\n6. **Hydrated sulfate-cemented siltstone** [3].\n7. **Fe/Mg-bearing phyllosilicates** [3].\n\nThese features are observed in both delta sections and are interpreted as results of aqueous alteration and diagenesis. \n\nI cannot answer this from the available NASA documents.",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 2,
+          "distance": 0.294389545917511
+        },
+        {
+          "label": 2,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 2,
+          "distance": 0.5239944458007812
+        },
+        {
+          "label": 3,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 2,
+          "distance": 0.5699654221534729
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": 1.0,
+        "evidence_supported": true,
+        "correct_refusal": null,
+        "latency_seconds": 34.4281
+      },
+      "error": null
+    },
+    {
+      "id": "multi-03",
+      "question": "Which imaging, contact-science, and remote-sensing instruments supported rover-based geologic mapping?",
+      "category": "multi_evidence",
+      "expected_behavior": "answer",
+      "answer": "The imaging, contact-science, and remote-sensing instruments supported rover-based geologic mapping are:\n\n- **Imaging instruments**: Mastcam-Z (panoramic cameras), Navcams (navigation cameras), and SuperCam VISIR.\n- **Contact-science instruments**: SHERLOC (for contact science), PIXL (for contact science), and RMI (for remote sensing).\n- **Remote-sensing instruments**: SuperCam LIBs and RMI (for remote sensing).\n\nThese instruments are used in conjunction with field geologic mapping to provide detailed information about the lithologies, contacts, and stratigraphic relationships on Mars. [1][2][3]",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 5,
+          "distance": 0.45581740140914917
+        },
+        {
+          "label": 2,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 3,
+          "distance": 0.45892834663391113
+        },
+        {
+          "label": 3,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 3,
+          "distance": 0.4641591012477875
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": 0.8,
+        "evidence_supported": false,
+        "correct_refusal": null,
+        "latency_seconds": 27.0911
+      },
+      "error": null
+    },
+    {
+      "id": "multi-04",
+      "question": "How do mapping confidence Levels 5 and 1 differ in range, detail, and reliability?",
+      "category": "multi_evidence",
+      "expected_behavior": "answer",
+      "answer": "Based on the retrieved NASA evidence, the differences between mapping confidence levels 5 and 1 are as follows:\n\n- **Range**: Level 5 is the highest confidence level, indicating the most detailed and reliable mapping. Level 1 is the lowest confidence level, indicating the least detailed and least reliable mapping.\n- **Detail**: Level 5 provides the most detailed information, while Level 1 provides the least detailed information.\n- **Reliability**: Level 5 is the most reliable, while Level 1 is the least reliable.\n\nThese differences are discussed in the context of the mapping confidence levels in [2], where it is stated that \"Reliable mapping occurs within Level 3, and Levels 4 and 5 are refinements\" and \"Level 2 mapping is useful for far-field context but relatively poorly constrained relative to the higher levels yet may still identify the important.\" However, the specific differences between Levels 5 and 1 are explicitly mentioned in the context of the mapping confidence levels in [2].",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 4,
+          "distance": 0.4758741855621338
+        },
+        {
+          "label": 2,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 6,
+          "distance": 0.5042202472686768
+        },
+        {
+          "label": 3,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 4,
+          "distance": 0.5089452862739563
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 0.5,
+        "answer_correct": false,
+        "citation_valid": true,
+        "evidence_support_score": 0.25,
+        "evidence_supported": false,
+        "correct_refusal": null,
+        "latency_seconds": 36.2087
+      },
+      "error": null
+    },
+    {
+      "id": "compare-01",
+      "question": "Compare the interpreted origins of the crater-floor formations with the delta-front rocks.",
+      "category": "document_comparison",
+      "expected_behavior": "answer",
+      "answer": "Insufficient evidence for a reliable comparison.",
+      "retrieved": [
+        {
+          "label": "S1",
+          "filename": "mars_report.pdf",
+          "sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5",
+          "page": 1,
+          "distance": 0.40859854221343994
+        },
+        {
+          "label": "S2",
+          "filename": "mars_report.pdf",
+          "sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5",
+          "page": 1,
+          "distance": 0.49656569957733154
+        },
+        {
+          "label": "S3",
+          "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd",
+          "page": 2,
+          "distance": 0.4134296476840973
+        },
+        {
+          "label": "S4",
+          "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd",
+          "page": 2,
+          "distance": 0.4259527623653412
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 0.0,
+        "answer_correct": false,
+        "citation_valid": false,
+        "evidence_support_score": 0.0,
+        "evidence_supported": false,
+        "correct_refusal": null,
+        "latency_seconds": 55.2601
+      },
+      "error": null
+    },
+    {
+      "id": "compare-02",
+      "question": "Compare the aqueous alteration evidence reported for the crater floor and delta front.",
+      "category": "document_comparison",
+      "expected_behavior": "answer",
+      "answer": "The aqueous alteration evidence reported for the crater floor and delta front differs between Document A and Document B. \n\nIn Document A, aqueous alteration is described as having variably affected the crater floor rocks, resulting in the formation of carbonate, iron oxides, amorphous silicates, sulfates, halite, perchlorates, phosphates, and potential phyllosilicates [S1]. These secondary minerals are observed on M\u00e1az and S\u00e9\u00edtah formation rocks. \n\nIn Document B, aqueous alteration is noted as present within both delta sections, including fracture-filling anhydrite veins, Mn-rich rock coatings, and dust coatings. Carbonate and/or sulfate, interpreted as alteration minerals, are observed in the delta front abrasion targets [S3]. \n\nWhile both documents mention aqueous alteration, the specific mineral assemblages and locations differ. Document A emphasizes the crater floor units with a focus on secondary mineral formation, while Document B highlights the delta front with a broader range of alteration features. No direct comparison of the extent or nature of aqueous alteration between the crater floor and delta front is provided in either document.",
+      "retrieved": [
+        {
+          "label": "S1",
+          "filename": "mars_report.pdf",
+          "sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5",
+          "page": 1,
+          "distance": 0.43846046924591064
+        },
+        {
+          "label": "S2",
+          "filename": "mars_report.pdf",
+          "sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5",
+          "page": 1,
+          "distance": 0.5631222128868103
+        },
+        {
+          "label": "S3",
+          "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd",
+          "page": 2,
+          "distance": 0.38037654757499695
+        },
+        {
+          "label": "S4",
+          "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd",
+          "page": 2,
+          "distance": 0.5059367418289185
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 0.75,
+        "answer_correct": false,
+        "citation_valid": true,
+        "evidence_support_score": 1.0,
+        "evidence_supported": true,
+        "correct_refusal": null,
+        "latency_seconds": 58.3166
+      },
+      "error": null
+    },
+    {
+      "id": "compare-03",
+      "question": "Compare unsuccessful or compromised sampling attempts described in the crater-floor and delta-front campaigns.",
+      "category": "document_comparison",
+      "expected_behavior": "answer",
+      "answer": "Insufficient evidence for a reliable comparison.",
+      "retrieved": [
+        {
+          "label": "S1",
+          "filename": "mars_report.pdf",
+          "sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5",
+          "page": 1,
+          "distance": 0.5291972756385803
+        },
+        {
+          "label": "S2",
+          "filename": "mars_report.pdf",
+          "sha256": "f3d3118e1e49744f506e53138e2e1ec9bce61f7023a3c175faaf6eee6b7dbfe5",
+          "page": 2,
+          "distance": 0.5705597400665283
+        },
+        {
+          "label": "S3",
+          "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd",
+          "page": 1,
+          "distance": 0.477478951215744
+        },
+        {
+          "label": "S4",
+          "filename": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "sha256": "d1eb49d737ba98a545833ae6380194e864922b078978fa091391701db68e45dd",
+          "page": 2,
+          "distance": 0.48480719327926636
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": true,
+        "source_recall_at_k": 1.0,
+        "answer_concept_score": 0.0,
+        "answer_correct": false,
+        "citation_valid": false,
+        "evidence_support_score": 0.0,
+        "evidence_supported": false,
+        "correct_refusal": null,
+        "latency_seconds": 26.2343
+      },
+      "error": null
+    },
+    {
+      "id": "unanswerable-01",
+      "question": "What exact air temperature did Perseverance measure at the instant it landed in Jezero crater?",
+      "category": "unanswerable",
+      "expected_behavior": "refuse",
+      "answer": "I cannot answer this from the available NASA documents.",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.3928926885128021
+        },
+        {
+          "label": 2,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 1,
+          "distance": 0.4490050971508026
+        },
+        {
+          "label": 3,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 11,
+          "distance": 0.4961235523223877
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": null,
+        "source_recall_at_k": null,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": null,
+        "evidence_supported": null,
+        "correct_refusal": true,
+        "latency_seconds": 19.3574
+      },
+      "error": null
+    },
+    {
+      "id": "unanswerable-02",
+      "question": "What was the rover's battery voltage during the first crater-floor drilling attempt?",
+      "category": "unanswerable",
+      "expected_behavior": "refuse",
+      "answer": "I cannot answer this from the available NASA documents.",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.5864635705947876
+        },
+        {
+          "label": 2,
+          "title": "Williams et al_LPSC 2023 Delta Front Overview abstract_v5.pdf",
+          "page": 2,
+          "distance": 0.6315865516662598
+        },
+        {
+          "label": 3,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 18,
+          "distance": 0.6592690348625183
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": null,
+        "source_recall_at_k": null,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": null,
+        "evidence_supported": null,
+        "correct_refusal": true,
+        "latency_seconds": 17.5927
+      },
+      "error": null
+    },
+    {
+      "id": "hallucination-01",
+      "question": "Which living microbes did Perseverance discover in the Jezero samples?",
+      "category": "hallucination_prone",
+      "expected_behavior": "refuse",
+      "answer": "I cannot answer this from the available NASA documents.",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.5092198848724365
+        },
+        {
+          "label": 2,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.5165054202079773
+        },
+        {
+          "label": 3,
+          "title": "mars_report.pdf",
+          "page": 1,
+          "distance": 0.5572006702423096
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": null,
+        "source_recall_at_k": null,
+        "answer_concept_score": 1.0,
+        "answer_correct": true,
+        "citation_valid": true,
+        "evidence_support_score": null,
+        "evidence_supported": null,
+        "correct_refusal": true,
+        "latency_seconds": 15.8651
+      },
+      "error": null
+    },
+    {
+      "id": "hallucination-02",
+      "question": "What single confirmed mechanism tilted the Artuby ridge layers to their current orientation?",
+      "category": "hallucination_prone",
+      "expected_behavior": "answer",
+      "answer": "The single confirmed mechanism that tilted the Artuby ridge layers to their current orientation is not explicitly stated in the provided evidence. However, the evidence suggests that fractures trending at right angles and those trending parallel to the escarpment edge could represent a response to strain associated with the development of the escarpment, or could have developed during uplift and tilting of the sections. This implies that the tilting may have occurred due to tectonic forces or structural deformation related to the escarpment formation.\n\nI cannot answer this from the available NASA documents.",
+      "retrieved": [
+        {
+          "label": 1,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 36,
+          "distance": 0.5006423592567444
+        },
+        {
+          "label": 2,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 33,
+          "distance": 0.5076943635940552
+        },
+        {
+          "label": 3,
+          "title": "Crumpler et al 2023 JGR Planets Mapping of Jezero.pdf",
+          "page": 35,
+          "distance": 0.5253679752349854
+        }
+      ],
+      "metrics": {
+        "retrieval_hit_at_k": false,
+        "source_recall_at_k": 0.0,
+        "answer_concept_score": 0.0,
+        "answer_correct": false,
+        "citation_valid": false,
+        "evidence_support_score": 0.0,
+        "evidence_supported": false,
+        "correct_refusal": null,
+        "latency_seconds": 39.0443
+      },
+      "error": null
+    }
+  ]
+}
