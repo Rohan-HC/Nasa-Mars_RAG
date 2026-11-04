@@ -1,5 +1,6 @@
 import json
 import logging
+from io import BytesIO
 from unittest.mock import Mock, patch
 
 import httpx
@@ -7,12 +8,18 @@ import pymupdf
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
+from starlette.datastructures import UploadFile
 
 import api
 import health_checks
 import rag_nasa
 from logging_config import JsonFormatter
-from service_errors import ModelTimeoutError, OllamaUnavailableError
+from service_errors import (
+    ModelTimeoutError,
+    OllamaUnavailableError,
+    RetrievalTimeoutError,
+    UploadStorageError,
+)
 
 
 def valid_pdf_bytes() -> bytes:
@@ -61,7 +68,13 @@ def test_readiness_check_reports_missing_required_model(tmp_path):
     response.raise_for_status.return_value = None
     response.json.return_value = {"models": [{"name": "qwen3:1.7b"}]}
 
-    with patch("health_checks.requests.get", return_value=response):
+    with (
+        patch("health_checks.requests.get", return_value=response),
+        patch(
+            "health_checks._check_vector_store",
+            return_value={"status": "ok"},
+        ),
+    ):
         result = health_checks.check_readiness(vector_store_path=tmp_path)
 
     assert result["ready"] is False
@@ -73,15 +86,51 @@ def test_readiness_check_reports_missing_required_model(tmp_path):
 
 
 def test_readiness_check_handles_ollama_connection_failure(tmp_path):
-    with patch(
-        "health_checks.requests.get",
-        side_effect=health_checks.requests.ConnectionError("offline"),
+    with (
+        patch(
+            "health_checks.requests.get",
+            side_effect=health_checks.requests.ConnectionError("offline"),
+        ),
+        patch(
+            "health_checks._check_vector_store",
+            return_value={"status": "ok"},
+        ),
     ):
         result = health_checks.check_readiness(vector_store_path=tmp_path)
 
     assert result["ready"] is False
     assert result["checks"]["ollama"] == {"status": "unavailable"}
     assert result["checks"]["models"] == {"status": "unknown"}
+
+
+def test_vector_store_readiness_requires_readable_collection_metadata(tmp_path):
+    collection = Mock()
+    collection.get.return_value = {
+        "ids": ["chunk-1"],
+        "metadatas": [
+            {"sha256": "a" * 64, "filename": "mars.pdf", "section": "content"}
+        ],
+    }
+    collection.count.return_value = 1
+    client = Mock()
+    client.get_collection.return_value = collection
+
+    with patch("health_checks.chromadb.PersistentClient", return_value=client):
+        result = health_checks._check_vector_store(tmp_path)
+
+    assert result == {"status": "ok", "chunks": 1}
+
+
+def test_vector_store_readiness_rejects_empty_collection(tmp_path):
+    collection = Mock()
+    collection.get.return_value = {"ids": [], "metadatas": []}
+    client = Mock()
+    client.get_collection.return_value = collection
+
+    with patch("health_checks.chromadb.PersistentClient", return_value=client):
+        result = health_checks._check_vector_store(tmp_path)
+
+    assert result == {"status": "empty"}
 
 
 def test_ask_maps_model_timeout_to_predictable_error_envelope():
@@ -96,19 +145,28 @@ def test_ask_maps_model_timeout_to_predictable_error_envelope():
     assert response.headers["x-request-id"] == body["error"]["request_id"]
 
 
-def test_unexpected_error_does_not_expose_sensitive_detail():
-    with patch(
-        "api.answer_question",
-        side_effect=RuntimeError("secret prompt and local path"),
-    ):
-        response = TestClient(api.app, raise_server_exceptions=False).post(
-            "/ask", json={"question": "Mars?"}
-        )
+def test_unexpected_error_does_not_expose_sensitive_detail(caplog):
+    with caplog.at_level(logging.INFO, logger="api"):
+        with patch(
+            "api.answer_question",
+            side_effect=RuntimeError("secret prompt and local path"),
+        ):
+            response = TestClient(api.app, raise_server_exceptions=False).post(
+                "/ask", json={"question": "Mars?"}
+            )
 
     assert response.status_code == 500
     serialized = json.dumps(response.json())
     assert "secret prompt" not in serialized
     assert response.json()["error"]["code"] == "internal_error"
+    assert response.headers["x-response-time-ms"]
+    completion = next(
+        record
+        for record in caplog.records
+        if record.msg == "request_complete" and record.status_code == 500
+    )
+    assert completion.duration_ms >= 0
+    assert completion.error_type == "RuntimeError"
 
 
 def test_failed_indexing_removes_uploaded_pdf(tmp_path):
@@ -159,6 +217,26 @@ def test_streaming_size_limit_removes_partial_upload(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
+def test_upload_stream_failure_removes_partial_file(tmp_path):
+    class FailingStream(BytesIO):
+        def __init__(self):
+            super().__init__(b"%PDF-partial")
+            self.read_count = 0
+
+        def read(self, size=-1):
+            self.read_count += 1
+            if self.read_count > 1:
+                raise OSError("disk stream failed")
+            return super().read(5)
+
+    upload = UploadFile(file=FailingStream(), filename="broken.pdf")
+    with patch.object(api, "UPLOAD_DIR", tmp_path):
+        with pytest.raises(UploadStorageError):
+            api.upload_document(upload)
+
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_model_timeout_is_converted_to_domain_error():
     document = Document(
         page_content="Mars evidence.",
@@ -172,6 +250,15 @@ def test_model_timeout_is_converted_to_domain_error():
         patch.object(rag_nasa, "llm", model),
     ):
         with pytest.raises(ModelTimeoutError):
+            rag_nasa.answer_question("What does the evidence say?")
+
+
+def test_retrieval_timeout_is_not_reported_as_model_timeout():
+    with patch(
+        "rag_nasa.search_nasa",
+        side_effect=httpx.TimeoutException("embedding timed out"),
+    ):
+        with pytest.raises(RetrievalTimeoutError):
             rag_nasa.answer_question("What does the evidence say?")
 
 

@@ -14,6 +14,7 @@ LOG_FIELDS = (
     "model_ms",
     "error_code",
     "error_type",
+    "error_location",
 )
 
 

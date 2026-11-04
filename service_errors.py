@@ -15,6 +15,15 @@ class ModelTimeoutError(ServiceError):
         )
 
 
+class RetrievalTimeoutError(ServiceError):
+    def __init__(self):
+        super().__init__(
+            code="retrieval_timeout",
+            message="Document retrieval timed out",
+            status_code=504,
+        )
+
+
 class OllamaUnavailableError(ServiceError):
     def __init__(self):
         super().__init__(
@@ -39,4 +48,13 @@ class IndexingFailedError(ServiceError):
             code="indexing_failed",
             message="PDF indexing failed; the temporary upload was removed",
             status_code=503,
+        )
+
+
+class UploadStorageError(ServiceError):
+    def __init__(self):
+        super().__init__(
+            code="upload_storage_error",
+            message="The uploaded file could not be stored",
+            status_code=500,
         )

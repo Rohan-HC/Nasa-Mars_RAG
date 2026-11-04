@@ -254,7 +254,7 @@ Seventeen positive cases identify a document SHA-256 and one or more verified PD
 | Metric | Meaning |
 |---|---|
 | Retrieval Hit@K | At least one expected source page was returned |
-| Source Recall@K | Fraction of expected source references returned |
+| Source Recall@K | Fraction of verified document-page pairs returned |
 | Answer correctness | Required benchmark concepts appeared in the answer |
 | Citation validity | Citation format and label existence were valid |
 | Evidence support | Required concepts appeared in the cited retrieved passages |
@@ -270,14 +270,14 @@ These are single live runs against the local three-document Chroma index and loc
 | Metric | Baseline | After citation enforcement |
 |---|---:|---:|
 | Retrieval Hit@4 | 94.1% | 94.1% |
-| Source Recall@4 | 94.1% | 94.1% |
+| Source Recall@4 | 89.2% | 89.2% |
 | Answer correctness | 70.0% | 65.0% |
-| Citation validity | 95.0% | 85.0% |
+| Citation validity | 95.0% | 100.0% |
 | Evidence-supported answers | 64.7% | 58.8% |
 | Correct refusal | 100.0% | 100.0% |
 | Mean response latency | 10.221 s | 23.262 s |
 
-The post-validation run did not demonstrate a general quality or speed improvement. It did demonstrate safer failure behavior: two comparison generations that failed citation requirements were withheld and replaced with an insufficient-evidence response. A stricter prompt experiment was reverted after it reduced measured correctness and increased latency.
+The post-validation run did not demonstrate a general quality or speed improvement. It did demonstrate safer failure behavior: invalid comparison generations and one mixed unsupported-claim/refusal response were withheld and replaced with an insufficient-evidence response. The saved post-citation responses were replayed through the final strict validator so the artifact reflects the final enforcement behavior. A stricter prompt experiment was reverted after it reduced measured correctness and increased latency.
 
 Full artifacts:
 
@@ -305,7 +305,8 @@ The research PDFs and local vector data are intentionally excluded from Git, so 
 - Model calls have a 120-second client timeout.
 - Embedding calls have a 30-second client timeout.
 - Connection and timeout failures map to stable API error codes.
-- Failed indexing removes the temporary upload.
+- Readiness opens the Chroma collection and verifies at least one chunk with required metadata.
+- Failed uploads and indexing attempts remove partial or temporary files.
 - Re-indexing preserves the previous version until new chunk IDs verify.
 - Duplicate uploads do not leave redundant PDF copies.
 - Every API response includes a request ID and end-to-end response time.

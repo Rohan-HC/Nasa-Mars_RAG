@@ -8,7 +8,7 @@
   },
   "summary": {
     "retrieval_hit_at_k": 0.9412,
-    "source_recall_at_k": 0.9412,
+    "source_recall_at_k": 0.8922,
     "answer_correctness": 0.7,
     "citation_validity": 0.95,
     "evidence_support": 0.6471,
@@ -395,7 +395,7 @@
       ],
       "metrics": {
         "retrieval_hit_at_k": true,
-        "source_recall_at_k": 1.0,
+        "source_recall_at_k": 0.5,
         "answer_concept_score": 0.6666666666666666,
         "answer_correct": false,
         "citation_valid": true,
@@ -512,7 +512,7 @@
       ],
       "metrics": {
         "retrieval_hit_at_k": true,
-        "source_recall_at_k": 1.0,
+        "source_recall_at_k": 0.6666666666666666,
         "answer_concept_score": 0.5,
         "answer_correct": false,
         "citation_valid": true,

@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from evaluation.dataset import EvaluationCase, load_dataset
-from evaluation.metrics import evaluate_response
+from evaluation.metrics import evaluate_response, summarize
 from evaluation.report import build_report
 from evaluation.run import run_evaluation
 from evaluation.verify_sources import verify_case_sources
@@ -83,6 +83,64 @@ def test_refusal_metric_accepts_configured_insufficient_evidence_response():
     assert metrics["citation_valid"] is True
 
 
+def test_refusal_metric_rejects_claim_then_refusal_text():
+    case = EvaluationCase(
+        case_id="fixture-mixed-refusal",
+        question="What is not in the corpus?",
+        category="hallucination_prone",
+        expected_behavior="refuse",
+        required_concepts=(),
+        source_references=(),
+    )
+    result = {
+        "answer": (
+            "Living microbes were discovered. "
+            "I cannot answer this from the available NASA documents."
+        ),
+        "retrieved": [],
+    }
+
+    metrics = evaluate_response(case, result, latency_seconds=0.1, k=3)
+
+    assert metrics["correct_refusal"] is False
+    assert metrics["answer_correct"] is False
+    assert metrics["citation_valid"] is False
+
+
+def test_source_recall_counts_each_expected_page():
+    case = EvaluationCase(
+        case_id="fixture-pages",
+        question="Compare the mapping levels.",
+        category="multi_evidence",
+        expected_behavior="answer",
+        required_concepts=(("mapping",),),
+        source_references=(
+            {
+                "document_sha256": "a" * 64,
+                "filename": "fixture.pdf",
+                "pages": [4, 5, 6],
+            },
+        ),
+    )
+    result = {
+        "answer": "Mapping is described [1].",
+        "retrieved": [
+            {
+                "label": 1,
+                "title": "fixture.pdf",
+                "sha256": "a" * 64,
+                "page": 4,
+                "text": "Mapping is described.",
+            }
+        ],
+    }
+
+    metrics = evaluate_response(case, result, latency_seconds=0.1, k=3)
+
+    assert metrics["retrieval_hit_at_k"] is True
+    assert metrics["source_recall_at_k"] == 1 / 3
+
+
 def test_report_labels_fixture_results_without_presenting_them_as_live_scores():
     payload = {
         "metadata": {
@@ -115,6 +173,16 @@ def test_committed_results_are_machine_readable_when_present():
     payload = json.loads(result_path.read_text(encoding="utf-8"))
     assert payload["metadata"]["execution_mode"] in {"live", "fixture"}
     assert payload["metadata"]["case_count"] == len(payload["cases"])
+
+
+def test_committed_result_summaries_match_case_metrics():
+    for result_path in Path("evaluation/results").glob("*.json"):
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        assert payload["summary"] == summarize(payload["cases"])
+        report_path = result_path.with_suffix(".md")
+        assert report_path.read_text(encoding="utf-8").strip() == build_report(
+            payload
+        ).strip()
 
 
 def test_saved_results_omit_full_source_passage_text():

@@ -29,6 +29,21 @@ def test_canonical_refusal_does_not_require_citation():
     assert validation["factual_grounding"]["status"] == "not_applicable"
 
 
+def test_claim_followed_by_refusal_is_not_treated_as_a_refusal():
+    validation = validate_citations(
+        (
+            "The formation definitely contains diamonds. "
+            "I cannot answer this from the available NASA documents."
+        ),
+        NUMERIC_SOURCES,
+        style="numeric",
+    )
+
+    assert validation["citation_valid"] is False
+    assert "Substantive answer is missing citations" in validation["errors"]
+    assert validation["factual_grounding"]["status"] == "not_verified"
+
+
 def test_unknown_numeric_citation_is_invalid():
     validation = validate_citations(
         "The formation contains olivine [3].",
@@ -61,6 +76,22 @@ def test_comparison_requires_citations_from_both_documents():
 
     validation = validate_citations(
         "Only document A is discussed [S1].",
+        sources,
+        style="source",
+        require_all_documents=True,
+    )
+
+    assert "Answer does not cite all compared documents" in validation["errors"]
+
+
+def test_comparison_uses_sha_identity_when_filenames_match():
+    sources = [
+        {"label": "S1", "filename": "same.pdf", "sha256": "a" * 64},
+        {"label": "S2", "filename": "same.pdf", "sha256": "b" * 64},
+    ]
+
+    validation = validate_citations(
+        "Only the first upload is discussed [S1].",
         sources,
         style="source",
         require_all_documents=True,

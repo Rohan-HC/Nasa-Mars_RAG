@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import traceback
 from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
@@ -17,7 +18,7 @@ from document_indexer import index_uploaded_pdf
 from health_checks import check_readiness
 from logging_config import configure_logging
 from rag_nasa import answer_question
-from service_errors import IndexingFailedError, ServiceError
+from service_errors import IndexingFailedError, ServiceError, UploadStorageError
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ async def observe_request(request: Request, call_next):
     request_id = uuid4().hex
     request.state.request_id = request_id
     started = perf_counter()
+    request.state.started_at = started
     response = await call_next(request)
     duration_ms = round((perf_counter() - started) * 1000, 2)
     response.headers["X-Request-ID"] = request_id
@@ -131,20 +133,46 @@ async def request_validation_error_handler(
 
 @app.exception_handler(Exception)
 async def unexpected_error_handler(request: Request, error: Exception):
+    duration_ms = round(
+        (perf_counter() - getattr(request.state, "started_at", perf_counter())) * 1000,
+        2,
+    )
+    traceback_frames = traceback.extract_tb(error.__traceback__)
+    error_location = None
+    if traceback_frames:
+        final_frame = traceback_frames[-1]
+        error_location = (
+            f"{Path(final_frame.filename).name}:"
+            f"{final_frame.lineno}:{final_frame.name}"
+        )
     logger.error(
         "unexpected_error",
         extra={
             "request_id": _request_id(request),
             "error_code": "internal_error",
             "error_type": type(error).__name__,
+            "error_location": error_location,
         },
     )
-    return _error_response(
+    response = _error_response(
         request,
         status_code=500,
         code="internal_error",
         message="An unexpected server error occurred",
     )
+    response.headers["X-Response-Time-Ms"] = str(duration_ms)
+    logger.info(
+        "request_complete",
+        extra={
+            "request_id": _request_id(request),
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": 500,
+            "duration_ms": duration_ms,
+            "error_type": type(error).__name__,
+        },
+    )
+    return response
 
 
 @app.post("/compare/campaigns")
@@ -297,6 +325,10 @@ def upload_document(file: UploadFile = File(...)):
         raise HTTPException(
             status_code=422, detail="Uploaded file is not a readable PDF"
         )
+
+    except OSError as error:
+        destination.unlink(missing_ok=True)
+        raise UploadStorageError() from error
 
     finally:
         file.file.close()

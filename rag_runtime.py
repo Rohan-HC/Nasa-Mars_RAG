@@ -4,6 +4,7 @@ from ollama import ResponseError
 from service_errors import (
     ModelTimeoutError,
     OllamaUnavailableError,
+    RetrievalTimeoutError,
     RetrievalUnavailableError,
 )
 
@@ -14,7 +15,7 @@ def retrieve(search_function, *args, **kwargs):
     except FileNotFoundError as error:
         raise RetrievalUnavailableError() from error
     except httpx.TimeoutException as error:
-        raise ModelTimeoutError() from error
+        raise RetrievalTimeoutError() from error
     except (httpx.HTTPError, ResponseError, ConnectionError) as error:
         raise OllamaUnavailableError() from error
 

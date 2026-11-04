@@ -3,10 +3,8 @@ from __future__ import annotations
 import re
 from statistics import fmean
 
+from citation_validation import is_refusal
 from evaluation.dataset import EvaluationCase
-
-
-REFUSAL_TEXT = "i cannot answer this from the available nasa documents"
 
 
 def normalize(text: str) -> str:
@@ -65,22 +63,33 @@ def evaluate_response(
     cited_labels, citation_format_valid = _citation_labels(answer)
     available_labels = {_source_label(source) for source in sources}
 
-    if case.source_references:
-        matched_references = sum(
-            any(_reference_matches_source(reference, source) for source in sources)
-            for reference in case.source_references
+    expected_pages = [
+        (reference, page)
+        for reference in case.source_references
+        for page in reference["pages"]
+    ]
+    if expected_pages:
+        matched_pages = sum(
+            any(
+                _reference_matches_source(
+                    {**reference, "pages": [page]},
+                    source,
+                )
+                for source in sources
+            )
+            for reference, page in expected_pages
         )
-        source_recall = matched_references / len(case.source_references)
-        retrieval_hit = matched_references > 0
+        source_recall = matched_pages / len(expected_pages)
+        retrieval_hit = matched_pages > 0
     else:
         source_recall = None
         retrieval_hit = None
 
-    correct_refusal = REFUSAL_TEXT in normalize(answer)
+    correct_refusal = is_refusal(answer)
     concept_score = _concept_score(case.required_concepts, answer)
     answer_correct = concept_score == 1.0 if case.expects_answer else correct_refusal
 
-    requires_citation = case.expects_answer and bool(answer.strip())
+    requires_citation = bool(answer.strip()) and not correct_refusal
     citation_valid = (
         citation_format_valid
         and cited_labels.issubset(available_labels)

@@ -10,7 +10,15 @@ REFUSAL_PHRASES = (
 
 def is_refusal(answer: str) -> bool:
     normalized = " ".join(answer.casefold().split())
-    return any(phrase in normalized for phrase in REFUSAL_PHRASES)
+    return normalized.removesuffix(".") in REFUSAL_PHRASES
+
+
+def _document_identity(source: dict) -> str:
+    file_hash = str(source.get("sha256", "")).casefold()
+    if re.fullmatch(r"[a-f0-9]{64}", file_hash):
+        return f"sha256:{file_hash}"
+    filename = str(source.get("filename") or source.get("title") or "")
+    return f"filename:{filename.casefold()}"
 
 
 def validate_citations(
@@ -47,14 +55,9 @@ def validate_citations(
         errors.append("Substantive answer is missing citations")
 
     if require_all_documents and not refusal:
-        source_documents = {
-            str(source.get("filename") or source.get("title") or "")
-            for source in sources
-        }
+        source_documents = {_document_identity(source) for source in sources}
         source_by_label = {
-            str(source["label"]): str(
-                source.get("filename") or source.get("title") or ""
-            )
+            str(source["label"]): _document_identity(source)
             for source in sources
         }
         cited_documents = {

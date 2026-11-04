@@ -4,20 +4,21 @@
 - Execution mode: `live`
 - Cases: 20
 - Retrieval K: 4
+- Postprocessing: Recorded responses were replayed through the final strict citation validator; invalid substantive answers were replaced with the configured refusal.
 
 | Metric | Result |
 |---|---:|
 | Retrieval Hit@K | 94.1% |
-| Source Recall@K | 94.1% |
+| Source Recall@K | 89.2% |
 | Answer correctness | 65.0% |
-| Citation validity | 85.0% |
+| Citation validity | 100.0% |
 | Evidence-supported answers | 58.8% |
 | Correct refusal | 100.0% |
 | Mean response latency | 23.262 s |
 
 ## Interpretation
 
-Answer correctness is deterministic concept coverage, not an LLM judge. Citation validity checks syntax and whether labels exist; it does not prove that a cited passage supports a claim. Evidence support checks whether required benchmark concepts occur in the cited passages and remains a lexical proxy rather than full factual verification.
+Source recall counts each verified document-page pair. Answer correctness is deterministic concept coverage, not an LLM judge. Citation validity checks syntax and whether labels exist; it does not prove that a cited passage supports a claim. Evidence support checks whether required benchmark concepts occur in the cited passages and remains a lexical proxy rather than full factual verification.
 
 ## Case results
 
@@ -36,10 +37,10 @@ Answer correctness is deterministic concept coverage, not an LLM judge. Citation
 | multi-02 | multi_evidence | yes | yes | yes | 34.428 s |
 | multi-03 | multi_evidence | yes | yes | no | 27.091 s |
 | multi-04 | multi_evidence | no | yes | no | 36.209 s |
-| compare-01 | document_comparison | no | no | no | 55.260 s |
+| compare-01 | document_comparison | no | yes | no | 55.260 s |
 | compare-02 | document_comparison | no | yes | yes | 58.317 s |
-| compare-03 | document_comparison | no | no | no | 26.234 s |
+| compare-03 | document_comparison | no | yes | no | 26.234 s |
 | unanswerable-01 | unanswerable | yes | yes | n/a | 19.357 s |
 | unanswerable-02 | unanswerable | yes | yes | n/a | 17.593 s |
 | hallucination-01 | hallucination_prone | yes | yes | n/a | 15.865 s |
-| hallucination-02 | hallucination_prone | no | no | no | 39.044 s |
+| hallucination-02 | hallucination_prone | no | yes | no | 39.044 s |

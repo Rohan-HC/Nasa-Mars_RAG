@@ -20,8 +20,10 @@ def build_report(payload: dict) -> str:
         f"- Execution mode: `{mode}`",
         f"- Cases: {metadata['case_count']}",
         f"- Retrieval K: {metadata.get('k', 'n/a')}",
-        "",
     ]
+    if metadata.get("postprocessing"):
+        lines.append(f"- Postprocessing: {metadata['postprocessing']}")
+    lines.append("")
     if mode != "live":
         lines.extend(
             [
@@ -43,7 +45,7 @@ def build_report(payload: dict) -> str:
             "",
             "## Interpretation",
             "",
-            "Answer correctness is deterministic concept coverage, not an LLM judge. Citation validity checks syntax and whether labels exist; it does not prove that a cited passage supports a claim. Evidence support checks whether required benchmark concepts occur in the cited passages and remains a lexical proxy rather than full factual verification.",
+            "Source recall counts each verified document-page pair. Answer correctness is deterministic concept coverage, not an LLM judge. Citation validity checks syntax and whether labels exist; it does not prove that a cited passage supports a claim. Evidence support checks whether required benchmark concepts occur in the cited passages and remains a lexical proxy rather than full factual verification.",
             "",
             "## Case results",
             "",

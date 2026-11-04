@@ -4,13 +4,14 @@
     "execution_mode": "live",
     "case_count": 20,
     "k": 4,
-    "generated_at_utc": "2026-11-04T00:05:17.721912+00:00"
+    "generated_at_utc": "2026-11-04T00:05:17.721912+00:00",
+    "postprocessing": "Recorded responses were replayed through the final strict citation validator; invalid substantive answers were replaced with the configured refusal."
   },
   "summary": {
     "retrieval_hit_at_k": 0.9412,
-    "source_recall_at_k": 0.9412,
+    "source_recall_at_k": 0.8922,
     "answer_correctness": 0.65,
-    "citation_validity": 0.85,
+    "citation_validity": 1.0,
     "evidence_support": 0.5882,
     "correct_refusal": 1.0,
     "mean_latency_seconds": 23.2616
@@ -395,7 +396,7 @@
       ],
       "metrics": {
         "retrieval_hit_at_k": true,
-        "source_recall_at_k": 1.0,
+        "source_recall_at_k": 0.5,
         "answer_concept_score": 0.6666666666666666,
         "answer_correct": false,
         "citation_valid": true,
@@ -512,7 +513,7 @@
       ],
       "metrics": {
         "retrieval_hit_at_k": true,
-        "source_recall_at_k": 1.0,
+        "source_recall_at_k": 0.6666666666666666,
         "answer_concept_score": 0.5,
         "answer_correct": false,
         "citation_valid": true,
@@ -564,7 +565,7 @@
         "source_recall_at_k": 1.0,
         "answer_concept_score": 0.0,
         "answer_correct": false,
-        "citation_valid": false,
+        "citation_valid": true,
         "evidence_support_score": 0.0,
         "evidence_supported": false,
         "correct_refusal": null,
@@ -662,7 +663,7 @@
         "source_recall_at_k": 1.0,
         "answer_concept_score": 0.0,
         "answer_correct": false,
-        "citation_valid": false,
+        "citation_valid": true,
         "evidence_support_score": 0.0,
         "evidence_supported": false,
         "correct_refusal": null,
@@ -792,7 +793,7 @@
       "question": "What single confirmed mechanism tilted the Artuby ridge layers to their current orientation?",
       "category": "hallucination_prone",
       "expected_behavior": "answer",
-      "answer": "The single confirmed mechanism that tilted the Artuby ridge layers to their current orientation is not explicitly stated in the provided evidence. However, the evidence suggests that fractures trending at right angles and those trending parallel to the escarpment edge could represent a response to strain associated with the development of the escarpment, or could have developed during uplift and tilting of the sections. This implies that the tilting may have occurred due to tectonic forces or structural deformation related to the escarpment formation.\n\nI cannot answer this from the available NASA documents.",
+      "answer": "I cannot answer this from the available NASA documents.",
       "retrieved": [
         {
           "label": 1,
@@ -818,7 +819,7 @@
         "source_recall_at_k": 0.0,
         "answer_concept_score": 0.0,
         "answer_correct": false,
-        "citation_valid": false,
+        "citation_valid": true,
         "evidence_support_score": 0.0,
         "evidence_supported": false,
         "correct_refusal": null,

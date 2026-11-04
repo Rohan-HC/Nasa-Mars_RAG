@@ -8,7 +8,7 @@
 | Metric | Result |
 |---|---:|
 | Retrieval Hit@K | 94.1% |
-| Source Recall@K | 94.1% |
+| Source Recall@K | 89.2% |
 | Answer correctness | 70.0% |
 | Citation validity | 95.0% |
 | Evidence-supported answers | 64.7% |
@@ -17,7 +17,7 @@
 
 ## Interpretation
 
-Answer correctness is deterministic concept coverage, not an LLM judge. Citation validity checks syntax and whether labels exist; it does not prove that a cited passage supports a claim. Evidence support checks whether required benchmark concepts occur in the cited passages and remains a lexical proxy rather than full factual verification.
+Source recall counts each verified document-page pair. Answer correctness is deterministic concept coverage, not an LLM judge. Citation validity checks syntax and whether labels exist; it does not prove that a cited passage supports a claim. Evidence support checks whether required benchmark concepts occur in the cited passages and remains a lexical proxy rather than full factual verification.
 
 ## Case results
 
