@@ -34,7 +34,7 @@ def run_migrations_online() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
-    with connectable.connect() as connection:
+    with connectable.begin() as connection:
         connection.exec_driver_sql("PRAGMA foreign_keys=ON")
         context.configure(
             connection=connection,

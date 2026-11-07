@@ -104,8 +104,14 @@ def test_initial_migration_creates_empty_identity_and_acl_schema(tmp_path: Path)
         "documents",
         "document_versions",
         "document_permissions",
+        "chunks",
         "alembic_version",
     }.issubset(inspect(database.engine).get_table_names())
+    version_columns = {
+        column["name"]
+        for column in inspect(database.engine).get_columns("document_versions")
+    }
+    assert {"based_on_version_id", "derived_cleaned_at"}.issubset(version_columns)
     with database.session() as session:
         assert CatalogRepository(session).get_user_by_username("admin") is None
 

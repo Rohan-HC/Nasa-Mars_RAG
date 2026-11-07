@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -63,6 +63,7 @@ class DocumentVersion(Base):
     )
     content_sha256: Mapped[str] = mapped_column(String(64))
     index_schema_version: Mapped[str] = mapped_column(String(32), default="v3")
+    based_on_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     filename: Mapped[str] = mapped_column(String(255))
     storage_path: Mapped[str] = mapped_column(String(1024))
     status: Mapped[str] = mapped_column(String(32), default="staged")
@@ -70,6 +71,28 @@ class DocumentVersion(Base):
     chunk_count: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=utc_now)
     activated_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    derived_cleaned_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class Chunk(Base):
+    __tablename__ = "chunks"
+    __table_args__ = (
+        UniqueConstraint("version_id", "ordinal", name="uq_chunk_version_ordinal"),
+        Index("ix_chunks_document_version", "document_id", "version_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    version_id: Mapped[str] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="CASCADE"), index=True
+    )
+    ordinal: Mapped[int] = mapped_column(Integer)
+    page: Mapped[int] = mapped_column(Integer)
+    section: Mapped[str] = mapped_column(String(32))
+    filename: Mapped[str] = mapped_column(String(255))
+    text: Mapped[str] = mapped_column(Text)
 
 
 class DocumentPermission(Base):

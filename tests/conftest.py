@@ -28,6 +28,9 @@ def pdf_file(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def authenticated_api(tmp_path: Path):
+    from types import SimpleNamespace
+
+    import api
     from api import create_app
     from nasa_rag.catalog import CatalogRepository
     from nasa_rag.db import Database
@@ -41,10 +44,55 @@ def authenticated_api(tmp_path: Path):
         )
     tokens = TokenService("t" * 32)
     upload_dir = tmp_path / "uploads"
+
+    class ScriptedIndexingService:
+        def prepare_new_document(
+            self, *, owner_id, name, storage_path, content_sha256
+        ):
+            with database.session() as session:
+                catalog = CatalogRepository(session)
+                document = catalog.create_document(owner_id, name)
+                version = catalog.create_version(
+                    document.id,
+                    content_sha256=content_sha256,
+                    filename=name,
+                    storage_path=str(storage_path),
+                )
+                return SimpleNamespace(
+                    document_id=document.id,
+                    version_id=version.id,
+                    action="index",
+                )
+
+        def process(self, version_id):
+            with database.session() as session:
+                catalog = CatalogRepository(session)
+                version = catalog.get_version(version_id)
+                result = api.index_uploaded_pdf(
+                    pdf_path=Path(version.storage_path),
+                    file_hash=version.content_sha256,
+                    original_name=version.filename,
+                    document_id=version.document_id,
+                    version_id=version.id,
+                )
+                catalog.mark_version_indexed(
+                    version.id,
+                    page_count=1,
+                    chunk_count=result["chunks"],
+                )
+                catalog.activate_version(version.document_id, version.id)
+                return SimpleNamespace(
+                    document_id=version.document_id,
+                    version_id=version.id,
+                    status=result["status"],
+                    chunks=result["chunks"],
+                )
+
     app = create_app(
         database=database,
         token_service=tokens,
         upload_dir=upload_dir,
+        indexing_service=ScriptedIndexingService(),
     )
     return {
         "app": app,

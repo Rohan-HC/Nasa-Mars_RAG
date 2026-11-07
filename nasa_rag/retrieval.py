@@ -113,3 +113,32 @@ class ChromaDenseIndex:
         data = self.store.get(where={"version_id": version_id}, include=[])
         if data["ids"]:
             self.store.delete(ids=list(data["ids"]))
+
+    def version_chunk_ids(self, version_id: str) -> set[str]:
+        data = self.store.get(where={"version_id": version_id}, include=[])
+        return set(data["ids"])
+
+    def verify(self, chunks: list[IndexedChunk]) -> bool:
+        if not chunks:
+            return False
+        expected = {chunk.chunk_id: chunk for chunk in chunks}
+        data = self.store.get(
+            ids=list(expected),
+            include=["documents", "metadatas"],
+        )
+        if set(data["ids"]) != set(expected):
+            return False
+        for chunk_id, text, metadata in zip(
+            data["ids"], data["documents"], data["metadatas"]
+        ):
+            chunk = expected[chunk_id]
+            if (
+                text != chunk.text
+                or metadata.get("document_id") != chunk.document_id
+                or metadata.get("version_id") != chunk.version_id
+                or metadata.get("chunk_id") != chunk.chunk_id
+                or int(metadata.get("page", -1)) != chunk.page
+                or metadata.get("section") != chunk.section
+            ):
+                return False
+        return True

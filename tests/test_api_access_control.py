@@ -10,6 +10,7 @@ from nasa_rag.catalog import CatalogRepository
 from nasa_rag.db import Database
 from nasa_rag.security import TokenService, hash_password
 from nasa_rag.rate_limit import SlidingWindowRateLimiter
+from nasa_rag.indexing import IndexingService
 
 
 @pytest.fixture
@@ -227,3 +228,38 @@ def test_bob_cannot_compare_with_alice_document_or_change_its_acl(secure_api):
 
     assert comparison.status_code == 404
     assert grant.status_code == 404
+
+
+def test_bob_cannot_delete_alice_document(secure_api):
+    class EmptyExtractor:
+        def extract(self, _path):
+            raise AssertionError("deletion must not extract content")
+
+    class MemoryIndex:
+        def delete_version(self, _version_id):
+            return None
+
+        def upsert(self, _chunks):
+            raise AssertionError("deletion must not index content")
+
+        def verify(self, _chunks):
+            return False
+
+        def version_chunk_ids(self, _version_id):
+            return set()
+
+    secure_api["client"].app.state.indexing_service = IndexingService(
+        secure_api["database"], EmptyExtractor(), MemoryIndex()
+    )
+
+    response = secure_api["client"].delete(
+        f"/documents/{secure_api['alice_document'].id}",
+        headers=secure_api["bob_headers"],
+    )
+
+    assert response.status_code == 404
+    with secure_api["database"].session() as session:
+        assert CatalogRepository(session).require_document(
+            secure_api["alice"].id,
+            secure_api["alice_document"].id,
+        )

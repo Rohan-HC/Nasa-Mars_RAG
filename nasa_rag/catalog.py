@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from sqlalchemy import exists, or_, select
+from sqlalchemy import delete, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from nasa_rag.models import (
     Document,
     DocumentPermission,
     DocumentVersion,
+    Chunk,
     User,
     utc_now,
 )
@@ -66,6 +67,7 @@ class CatalogRepository:
         filename: str,
         storage_path: str,
         index_schema_version: str = "v3",
+        based_on_version_id: str | None = None,
     ) -> DocumentVersion:
         version = DocumentVersion(
             document_id=document_id,
@@ -73,10 +75,25 @@ class CatalogRepository:
             filename=filename,
             storage_path=storage_path,
             index_schema_version=index_schema_version,
+            based_on_version_id=based_on_version_id,
         )
         self.session.add(version)
         self.session.flush()
         return version
+
+    def find_version(
+        self,
+        document_id: str,
+        content_sha256: str,
+        index_schema_version: str,
+    ) -> DocumentVersion | None:
+        return self.session.scalar(
+            select(DocumentVersion).where(
+                DocumentVersion.document_id == document_id,
+                DocumentVersion.content_sha256 == content_sha256,
+                DocumentVersion.index_schema_version == index_schema_version,
+            )
+        )
 
     def activate_version(self, document_id: str, version_id: str) -> None:
         document = self.session.get(Document, document_id)
@@ -98,6 +115,99 @@ class CatalogRepository:
         document.status = "ready"
         document.updated_at = utc_now()
         self.session.flush()
+
+    def promote_version(
+        self,
+        document_id: str,
+        version_id: str,
+        *,
+        expected_active_version_id: str | None,
+    ) -> str | None:
+        document = self.session.get(Document, document_id)
+        version = self.session.get(DocumentVersion, version_id)
+        if (
+            document is None
+            or version is None
+            or version.document_id != document_id
+            or document.deleted_at is not None
+        ):
+            raise ValueError("Version does not belong to the active document")
+        if document.active_version_id != expected_active_version_id:
+            raise RuntimeError("Active document version changed")
+        previous_id = document.active_version_id
+        if previous_id and previous_id != version_id:
+            previous = self.session.get(DocumentVersion, previous_id)
+            if previous is not None:
+                previous.status = "superseded"
+        version.status = "active"
+        version.activated_at = utc_now()
+        document.active_version_id = version.id
+        document.status = "ready"
+        document.updated_at = utc_now()
+        self.session.flush()
+        return previous_id
+
+    def replace_chunks(self, version_id: str, chunks: list[Chunk]) -> None:
+        self.session.execute(delete(Chunk).where(Chunk.version_id == version_id))
+        self.session.add_all(chunks)
+        self.session.flush()
+
+    def chunk_ids(self, version_id: str) -> set[str]:
+        return set(
+            self.session.scalars(select(Chunk.id).where(Chunk.version_id == version_id))
+        )
+
+    def chunk_count(self, version_id: str) -> int:
+        return int(
+            self.session.scalar(
+                select(func.count()).select_from(Chunk).where(Chunk.version_id == version_id)
+            )
+            or 0
+        )
+
+    def delete_chunks(self, version_id: str) -> None:
+        self.session.execute(delete(Chunk).where(Chunk.version_id == version_id))
+        self.session.flush()
+
+    def all_versions_for_document(self, document_id: str) -> list[DocumentVersion]:
+        return list(
+            self.session.scalars(
+                select(DocumentVersion).where(DocumentVersion.document_id == document_id)
+            )
+        )
+
+    def stale_derived_versions(self) -> list[DocumentVersion]:
+        return list(
+            self.session.scalars(
+                select(DocumentVersion)
+                .join(Document, Document.id == DocumentVersion.document_id)
+                .where(
+                    or_(
+                        Document.deleted_at.is_not(None),
+                        DocumentVersion.status.in_(["failed", "superseded"]),
+                    ),
+                    DocumentVersion.derived_cleaned_at.is_(None),
+                )
+            )
+        )
+
+    def mark_derived_cleaned(self, version_id: str) -> None:
+        version = self.session.get(DocumentVersion, version_id)
+        if version is not None:
+            version.derived_cleaned_at = utc_now()
+            self.session.flush()
+
+    def soft_delete_document(self, owner_id: str, document_id: str) -> list[str]:
+        document = self.require_document(owner_id, document_id, owner=True)
+        version_ids = [
+            version.id for version in self.all_versions_for_document(document_id)
+        ]
+        document.deleted_at = utc_now()
+        document.status = "deleted"
+        document.active_version_id = None
+        document.updated_at = utc_now()
+        self.session.flush()
+        return version_ids
 
     @staticmethod
     def _access_predicate(user_id: str):

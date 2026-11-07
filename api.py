@@ -28,9 +28,16 @@ from nasa_rag.catalog import CatalogRepository, DocumentAccessError
 from nasa_rag.config import Settings
 from nasa_rag.db import Database
 from nasa_rag.models import User
+from nasa_rag.indexing import (
+    ConcurrentReplacementError,
+    IndexingService,
+    PdfChunkExtractor,
+)
 from nasa_rag.rate_limit import SlidingWindowRateLimiter
+from nasa_rag.retrieval import ChromaDenseIndex
 from nasa_rag.security import InvalidTokenError, TokenService
 from rag_nasa import answer_question
+from retrieval_embeddings import NomicRetrievalEmbeddings
 from service_errors import IndexingFailedError, ServiceError, UploadStorageError
 
 
@@ -177,6 +184,7 @@ def create_app(
     upload_dir: Path | None = None,
     login_limiter: SlidingWindowRateLimiter | None = None,
     user_limiter: SlidingWindowRateLimiter | None = None,
+    indexing_service: IndexingService | None = None,
 ) -> FastAPI:
     settings = Settings.from_env()
     application = FastAPI(title="NASA Mars RAG API", version="0.3.0")
@@ -199,6 +207,22 @@ def create_app(
         limit=60,
         window_seconds=60,
     )
+    application.state.indexing_service = indexing_service
+    application.state.chroma_path = settings.chroma_path
+
+    def get_indexing_service(request: Request) -> IndexingService:
+        service = request.app.state.indexing_service
+        if service is None:
+            service = IndexingService(
+                request.app.state.database,
+                PdfChunkExtractor(),
+                ChromaDenseIndex(
+                    request.app.state.chroma_path,
+                    NomicRetrievalEmbeddings(),
+                ),
+            )
+            request.app.state.indexing_service = service
+        return service
 
     def enforce_user_limit(request: Request, user: User) -> None:
         if not request.app.state.user_limiter.allow(user.id):
@@ -557,54 +581,98 @@ def create_app(
             file,
             request.app.state.upload_dir,
         )
-        with request.app.state.database.session() as session:
-            catalog = CatalogRepository(session)
-            document = catalog.create_document(current_user.id, original_name)
-            version = catalog.create_version(
-                document.id,
-                content_sha256=file_hash,
-                filename=original_name,
-                storage_path=str(destination),
-            )
-            document_id = document.id
-            version_id = version.id
         try:
-            index_result = index_uploaded_pdf(
-                pdf_path=destination,
-                file_hash=file_hash,
-                original_name=original_name,
-                document_id=document_id,
-                version_id=version_id,
+            service = get_indexing_service(request)
+            plan = service.prepare_new_document(
+                owner_id=current_user.id,
+                name=original_name,
+                storage_path=destination,
+                content_sha256=file_hash,
             )
-            with request.app.state.database.session() as session:
-                catalog = CatalogRepository(session)
-                catalog.mark_version_indexed(
-                    version_id,
-                    page_count=page_count,
-                    chunk_count=index_result["chunks"],
-                )
-                catalog.activate_version(document_id, version_id)
+            index_result = service.process(plan.version_id)
         except ValueError as error:
             destination.unlink(missing_ok=True)
-            with request.app.state.database.session() as session:
-                CatalogRepository(session).mark_version_failed(version_id)
             raise HTTPException(status_code=422, detail=str(error)) from error
         except Exception as error:
             destination.unlink(missing_ok=True)
-            with request.app.state.database.session() as session:
-                CatalogRepository(session).mark_version_failed(version_id)
             logger.error("indexing_failed", extra={"error_type": type(error).__name__})
             raise IndexingFailedError() from error
         return {
-            "document_id": document_id,
-            "version_id": version_id,
+            "document_id": index_result.document_id,
+            "version_id": index_result.version_id,
             "filename": original_name,
             "sha256": file_hash,
             "pages": page_count,
             "size_bytes": total_bytes,
-            "index_status": index_result["status"],
-            "chunks": index_result["chunks"],
+            "index_status": index_result.status,
+            "chunks": index_result.chunks,
         }
+
+    @application.put("/documents/{document_id}/content")
+    def replace_document_content(
+        document_id: UUID,
+        request: Request,
+        current_user: Annotated[User, Depends(get_current_user)],
+        file: UploadFile = File(...),
+    ):
+        enforce_user_limit(request, current_user)
+        destination, file_hash, page_count, total_bytes = store_validated_pdf(
+            file,
+            request.app.state.upload_dir,
+        )
+        try:
+            service = get_indexing_service(request)
+            plan = service.prepare_replacement(
+                owner_id=current_user.id,
+                document_id=str(document_id),
+                storage_path=destination,
+                content_sha256=file_hash,
+            )
+            result = service.process(plan.version_id)
+        except DocumentAccessError as error:
+            destination.unlink(missing_ok=True)
+            raise HTTPException(status_code=404, detail="Document not found") from error
+        except ConcurrentReplacementError as error:
+            destination.unlink(missing_ok=True)
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        except ValueError as error:
+            destination.unlink(missing_ok=True)
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except Exception as error:
+            destination.unlink(missing_ok=True)
+            logger.error("indexing_failed", extra={"error_type": type(error).__name__})
+            raise IndexingFailedError() from error
+        if plan.action == "skip":
+            destination.unlink(missing_ok=True)
+        return {
+            "document_id": result.document_id,
+            "version_id": result.version_id,
+            "sha256": file_hash,
+            "pages": page_count,
+            "size_bytes": total_bytes,
+            "index_status": result.status,
+            "chunks": result.chunks,
+        }
+
+    @application.delete("/documents/{document_id}", status_code=204)
+    def delete_document(
+        document_id: UUID,
+        request: Request,
+        current_user: Annotated[User, Depends(get_current_user)],
+    ):
+        try:
+            cleanup_complete = get_indexing_service(request).delete_document(
+                current_user.id,
+                str(document_id),
+            )
+        except DocumentAccessError as error:
+            raise HTTPException(status_code=404, detail="Document not found") from error
+        if not cleanup_complete:
+            logger.warning(
+                "derived_cleanup_pending",
+                extra={"error_type": "DerivedCleanupIncomplete"},
+            )
+        return Response(status_code=204)
 
     return application
 
