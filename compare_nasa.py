@@ -92,6 +92,7 @@ def compare_campaigns(
     question: str,
     *,
     allowed_version_ids: list[str] | None = None,
+    retriever=None,
 ) -> dict:
     total_started = perf_counter()
     all_results = []
@@ -100,13 +101,21 @@ def compare_campaigns(
     # Step 1: Retrieve from each required document
     for search in SEARCHES:
         retrieval_started = perf_counter()
-        results = retrieve(
-            search_nasa,
-            question=search["question"],
-            k=search["k"],
-            filename=search["filename"],
-            version_ids=allowed_version_ids,
-        )
+        if retriever is not None:
+            results = retrieve(
+                retriever,
+                question=search["question"],
+                k=search["k"],
+                filename=search["filename"],
+            )
+        else:
+            results = retrieve(
+                search_nasa,
+                question=search["question"],
+                k=search["k"],
+                filename=search["filename"],
+                version_ids=allowed_version_ids,
+            )
         retrieval_ms += (perf_counter() - retrieval_started) * 1000
 
         if not results:

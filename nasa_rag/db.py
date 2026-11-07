@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -42,6 +42,24 @@ class Database:
 
     def create_schema(self) -> None:
         Base.metadata.create_all(self.engine)
+        if self.engine.dialect.name == "sqlite":
+            with self.engine.begin() as connection:
+                connection.execute(
+                    text(
+                        """
+                        CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(
+                            chunk_id UNINDEXED,
+                            document_id UNINDEXED,
+                            version_id UNINDEXED,
+                            filename UNINDEXED,
+                            page UNINDEXED,
+                            section UNINDEXED,
+                            text,
+                            tokenize='unicode61'
+                        )
+                        """
+                    )
+                )
 
     @contextmanager
     def session(self) -> Iterator[Session]:

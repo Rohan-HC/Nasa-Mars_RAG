@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import delete, exists, func, or_, select
+from sqlalchemy import delete, exists, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from nasa_rag.models import (
@@ -149,8 +149,36 @@ class CatalogRepository:
 
     def replace_chunks(self, version_id: str, chunks: list[Chunk]) -> None:
         self.session.execute(delete(Chunk).where(Chunk.version_id == version_id))
+        self.session.execute(
+            text("DELETE FROM chunk_fts WHERE version_id = :version_id"),
+            {"version_id": version_id},
+        )
         self.session.add_all(chunks)
         self.session.flush()
+        if chunks:
+            self.session.execute(
+                text(
+                    """
+                    INSERT INTO chunk_fts(
+                        chunk_id, document_id, version_id, filename, page, section, text
+                    ) VALUES (
+                        :chunk_id, :document_id, :version_id, :filename, :page, :section, :text
+                    )
+                    """
+                ),
+                [
+                    {
+                        "chunk_id": chunk.id,
+                        "document_id": chunk.document_id,
+                        "version_id": chunk.version_id,
+                        "filename": chunk.filename,
+                        "page": chunk.page,
+                        "section": chunk.section,
+                        "text": chunk.text,
+                    }
+                    for chunk in chunks
+                ],
+            )
 
     def chunk_ids(self, version_id: str) -> set[str]:
         return set(
@@ -167,7 +195,38 @@ class CatalogRepository:
 
     def delete_chunks(self, version_id: str) -> None:
         self.session.execute(delete(Chunk).where(Chunk.version_id == version_id))
+        self.session.execute(
+            text("DELETE FROM chunk_fts WHERE version_id = :version_id"),
+            {"version_id": version_id},
+        )
         self.session.flush()
+
+    def authorized_active_chunks(
+        self,
+        user_id: str,
+        chunk_ids: list[str],
+        *,
+        document_ids: list[str] | None = None,
+        filenames: list[str] | None = None,
+    ) -> list[Chunk]:
+        if not chunk_ids:
+            return []
+        query = (
+            select(Chunk)
+            .join(Document, Document.id == Chunk.document_id)
+            .where(
+                Chunk.id.in_(chunk_ids),
+                Document.deleted_at.is_(None),
+                Document.status == "ready",
+                Document.active_version_id == Chunk.version_id,
+                self._access_predicate(user_id),
+            )
+        )
+        if document_ids is not None:
+            query = query.where(Chunk.document_id.in_(document_ids))
+        if filenames is not None:
+            query = query.where(Chunk.filename.in_(filenames))
+        return list(self.session.scalars(query))
 
     def all_versions_for_document(self, document_id: str) -> list[DocumentVersion]:
         return list(

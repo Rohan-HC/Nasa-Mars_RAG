@@ -28,6 +28,8 @@ class RetrievedChunk:
     page: int
     text: str
     distance: float
+    retrieval_source: str = "dense"
+    rank_score: float | None = None
 
 
 class ChromaDenseIndex:

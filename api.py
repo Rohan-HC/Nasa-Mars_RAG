@@ -33,6 +33,7 @@ from nasa_rag.indexing import (
     PdfChunkExtractor,
 )
 from nasa_rag.jobs import JobQueue
+from nasa_rag.hybrid import HybridRetriever, LexicalIndex
 from nasa_rag.rate_limit import SlidingWindowRateLimiter
 from nasa_rag.retrieval import ChromaDenseIndex
 from nasa_rag.security import InvalidTokenError, TokenService
@@ -101,16 +102,19 @@ class LoginRequest(BaseModel):
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
     document_ids: list[UUID] | None = Field(default=None, max_length=20)
+    retrieval_mode: Literal["dense", "keyword", "hybrid"] | None = None
 
 
 class CompareRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
+    retrieval_mode: Literal["dense", "keyword", "hybrid"] | None = None
 
 
 class CompareDocumentsRequest(BaseModel):
     document_a: UUID
     document_b: UUID
     question: str = Field(min_length=1, max_length=1000)
+    retrieval_mode: Literal["dense", "keyword", "hybrid"] | None = None
 
 
 class PermissionRequest(BaseModel):
@@ -186,6 +190,7 @@ def create_app(
     user_limiter: SlidingWindowRateLimiter | None = None,
     indexing_service: IndexingService | None = None,
     job_queue: JobQueue | None = None,
+    retrieval_service: HybridRetriever | None = None,
 ) -> FastAPI:
     settings = Settings.from_env()
     application = FastAPI(title="NASA Mars RAG API", version="0.3.0")
@@ -194,10 +199,8 @@ def create_app(
         settings.jwt_secret,
         lifetime=timedelta(minutes=settings.access_token_minutes),
     )
-    application.state.answer_function = answer_function or _default_answer_function
-    application.state.comparison_function = (
-        comparison_function or _default_comparison_function
-    )
+    application.state.answer_function = answer_function
+    application.state.comparison_function = comparison_function
     application.state.upload_dir = upload_dir or settings.upload_dir
     application.state.access_token_seconds = settings.access_token_minutes * 60
     application.state.login_limiter = login_limiter or SlidingWindowRateLimiter(
@@ -211,6 +214,10 @@ def create_app(
     application.state.indexing_service = indexing_service
     application.state.job_queue = job_queue or JobQueue(application.state.database)
     application.state.chroma_path = settings.chroma_path
+    application.state.retrieval_service = retrieval_service
+    application.state.retrieval_mode = settings.retrieval_mode
+    application.state.retrieval_k = settings.retrieval_k
+    application.state.rrf_k = settings.rrf_k
 
     def get_indexing_service(request: Request) -> IndexingService:
         service = request.app.state.indexing_service
@@ -225,6 +232,21 @@ def create_app(
                 storage_root=request.app.state.upload_dir,
             )
             request.app.state.indexing_service = service
+        return service
+
+    def get_retrieval_service(request: Request) -> HybridRetriever:
+        service = request.app.state.retrieval_service
+        if service is None:
+            service = HybridRetriever(
+                request.app.state.database,
+                ChromaDenseIndex(
+                    request.app.state.chroma_path,
+                    NomicRetrievalEmbeddings(),
+                ),
+                LexicalIndex(request.app.state.database),
+                rrf_k=request.app.state.rrf_k,
+            )
+            request.app.state.retrieval_service = service
         return service
 
     def enforce_user_limit(request: Request, user: User) -> None:
@@ -535,14 +557,29 @@ def create_app(
                     raise HTTPException(
                         status_code=404, detail="Document not found"
                     ) from error
-        allowed_versions = catalog.allowed_active_version_ids(
-            current_user.id,
-            requested,
-        )
-        return request.app.state.answer_function(
-            question=question,
-            allowed_version_ids=allowed_versions,
-        )
+        if request.app.state.answer_function is not None:
+            allowed_versions = catalog.allowed_active_version_ids(
+                current_user.id,
+                requested,
+            )
+            return request.app.state.answer_function(
+                question=question,
+                allowed_version_ids=allowed_versions,
+            )
+        mode = body.retrieval_mode or request.app.state.retrieval_mode
+        retrieval_service = get_retrieval_service(request)
+
+        def authorised_search(search_question):
+            results = retrieval_service.search(
+                current_user.id,
+                search_question,
+                k=request.app.state.retrieval_k,
+                mode=mode,
+                document_ids=requested,
+            )
+            return retrieval_service.as_langchain_results(results)
+
+        return answer_question(question, search_function=authorised_search)
 
     @application.post("/compare/documents")
     def compare_selected_documents(
@@ -571,15 +608,34 @@ def create_app(
                 status_code=404,
                 detail="One or both documents were not found",
             ) from error
-        return request.app.state.comparison_function(
-            question=body.question.strip(),
-            document_a=document_a,
-            document_b=document_b,
-            version_ids={
+        comparison_arguments = {
+            "question": body.question.strip(),
+            "document_a": document_a,
+            "document_b": document_b,
+            "version_ids": {
                 document_a: first_version.id,
                 document_b: second_version.id,
             },
-            filenames={document_a: first.name, document_b: second.name},
+            "filenames": {document_a: first.name, document_b: second.name},
+        }
+        if request.app.state.comparison_function is not None:
+            return request.app.state.comparison_function(**comparison_arguments)
+        mode = body.retrieval_mode or request.app.state.retrieval_mode
+        retrieval_service = get_retrieval_service(request)
+
+        def comparison_retriever(*, question, k, document_id):
+            results = retrieval_service.search(
+                current_user.id,
+                question,
+                k=k,
+                mode=mode,
+                document_ids=[document_id],
+            )
+            return retrieval_service.as_langchain_results(results)
+
+        return compare_documents(
+            **comparison_arguments,
+            retriever=comparison_retriever,
         )
 
     @application.post("/compare/campaigns")
@@ -588,12 +644,22 @@ def create_app(
         current_user: Annotated[User, Depends(get_current_user)],
         session: Annotated[Session, Depends(get_session)],
     ):
-        versions = CatalogRepository(session).allowed_active_version_ids(
-            current_user.id
-        )
+        mode = body.retrieval_mode or request.app.state.retrieval_mode
+        retrieval_service = get_retrieval_service(request)
+
+        def campaign_retriever(*, question, k, filename):
+            results = retrieval_service.search(
+                current_user.id,
+                question,
+                k=k,
+                mode=mode,
+                filenames=[filename],
+            )
+            return retrieval_service.as_langchain_results(results)
+
         return compare_campaigns(
             body.question.strip(),
-            allowed_version_ids=versions,
+            retriever=campaign_retriever,
         )
 
     @application.post("/documents/upload", status_code=202)

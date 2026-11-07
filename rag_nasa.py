@@ -37,6 +37,7 @@ def answer_question(
     question: str,
     *,
     allowed_version_ids: list[str] | None = None,
+    search_function=None,
 ):
     total_started = perf_counter()
 
@@ -45,11 +46,14 @@ def answer_question(
 
     # Step 1: Retrieve relevant NASA chunks
     retrieval_started = perf_counter()
-    results = retrieve(
-        search_nasa,
-        question,
-        version_ids=allowed_version_ids,
-    )
+    if search_function is None:
+        results = retrieve(
+            search_nasa,
+            question,
+            version_ids=allowed_version_ids,
+        )
+    else:
+        results = retrieve(search_function, question)
     retrieval_ms = (perf_counter() - retrieval_started) * 1000
 
     if not results:

@@ -42,6 +42,7 @@ def compare_documents(
     *,
     version_ids: dict[str, str] | None = None,
     filenames: dict[str, str] | None = None,
+    retriever=None,
 ) -> dict:
     total_started = perf_counter()
 
@@ -77,15 +78,23 @@ def compare_documents(
         filename = catalog[file_hash]["filename"]
 
         retrieval_started = perf_counter()
-        results = retrieve(
-            search_nasa,
-            question=question,
-            k=2,
-            sha256=file_hash if version_ids is None else None,
-            version_ids=(
-                [version_ids[file_hash]] if version_ids is not None else None
-            ),
-        )
+        if retriever is not None:
+            results = retrieve(
+                retriever,
+                question=question,
+                k=2,
+                document_id=file_hash,
+            )
+        else:
+            results = retrieve(
+                search_nasa,
+                question=question,
+                k=2,
+                sha256=file_hash if version_ids is None else None,
+                version_ids=(
+                    [version_ids[file_hash]] if version_ids is not None else None
+                ),
+            )
         retrieval_ms += (perf_counter() - retrieval_started) * 1000
 
         if not results:

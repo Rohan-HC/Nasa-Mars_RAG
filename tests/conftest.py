@@ -91,6 +91,7 @@ def authenticated_api(tmp_path: Path):
     app = create_app(
         database=database,
         token_service=tokens,
+        answer_function=lambda **kwargs: api.answer_question(**kwargs),
         upload_dir=upload_dir,
         indexing_service=ScriptedIndexingService(),
     )
