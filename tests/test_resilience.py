@@ -133,9 +133,13 @@ def test_vector_store_readiness_rejects_empty_collection(tmp_path):
     assert result == {"status": "empty"}
 
 
-def test_ask_maps_model_timeout_to_predictable_error_envelope():
+def test_ask_maps_model_timeout_to_predictable_error_envelope(authenticated_api):
     with patch("api.answer_question", side_effect=ModelTimeoutError()):
-        response = TestClient(api.app).post("/ask", json={"question": "Mars?"})
+        response = authenticated_api["client"].post(
+            "/ask",
+            headers=authenticated_api["headers"],
+            json={"question": "Mars?"},
+        )
 
     assert response.status_code == 504
     body = response.json()
@@ -145,14 +149,20 @@ def test_ask_maps_model_timeout_to_predictable_error_envelope():
     assert response.headers["x-request-id"] == body["error"]["request_id"]
 
 
-def test_unexpected_error_does_not_expose_sensitive_detail(caplog):
+def test_unexpected_error_does_not_expose_sensitive_detail(
+    caplog, authenticated_api
+):
     with caplog.at_level(logging.INFO, logger="api"):
         with patch(
             "api.answer_question",
             side_effect=RuntimeError("secret prompt and local path"),
         ):
-            response = TestClient(api.app, raise_server_exceptions=False).post(
-                "/ask", json={"question": "Mars?"}
+            response = TestClient(
+                authenticated_api["app"], raise_server_exceptions=False
+            ).post(
+                "/ask",
+                headers=authenticated_api["headers"],
+                json={"question": "Mars?"},
             )
 
     assert response.status_code == 500
@@ -169,52 +179,48 @@ def test_unexpected_error_does_not_expose_sensitive_detail(caplog):
     assert completion.error_type == "RuntimeError"
 
 
-def test_failed_indexing_removes_uploaded_pdf(tmp_path):
-    with (
-        patch.object(api, "UPLOAD_DIR", tmp_path),
-        patch("api.index_uploaded_pdf", side_effect=RuntimeError("index failed")),
+def test_failed_indexing_removes_uploaded_pdf(authenticated_api):
+    with patch(
+        "api.index_uploaded_pdf", side_effect=RuntimeError("index failed")
     ):
-        response = TestClient(api.app).post(
+        response = authenticated_api["client"].post(
             "/documents/upload",
+            headers=authenticated_api["headers"],
             files={"file": ("mars.pdf", valid_pdf_bytes(), "application/pdf")},
         )
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "indexing_failed"
-    assert list(tmp_path.iterdir()) == []
+    assert list(authenticated_api["upload_dir"].iterdir()) == []
 
 
-def test_duplicate_upload_does_not_leave_redundant_pdf(tmp_path):
-    with (
-        patch.object(api, "UPLOAD_DIR", tmp_path),
-        patch(
-            "api.index_uploaded_pdf",
-            return_value={"status": "already_indexed", "chunks": 1},
-        ),
+def test_upload_keeps_source_pdf_for_version_lifecycle(authenticated_api):
+    with patch(
+        "api.index_uploaded_pdf",
+        return_value={"status": "already_indexed", "chunks": 1},
     ):
-        response = TestClient(api.app).post(
+        response = authenticated_api["client"].post(
             "/documents/upload",
+            headers=authenticated_api["headers"],
             files={"file": ("mars.pdf", valid_pdf_bytes(), "application/pdf")},
         )
 
     assert response.status_code == 201
     assert response.json()["index_status"] == "already_indexed"
-    assert list(tmp_path.iterdir()) == []
+    assert len(list(authenticated_api["upload_dir"].iterdir())) == 1
 
 
-def test_streaming_size_limit_removes_partial_upload(tmp_path):
-    with (
-        patch.object(api, "UPLOAD_DIR", tmp_path),
-        patch.object(api, "MAX_FILE_SIZE", 10),
-    ):
-        response = TestClient(api.app).post(
+def test_streaming_size_limit_removes_partial_upload(authenticated_api):
+    with patch.object(api, "MAX_FILE_SIZE", 10):
+        response = authenticated_api["client"].post(
             "/documents/upload",
+            headers=authenticated_api["headers"],
             files={"file": ("large.pdf", b"%PDF-" + b"x" * 20, "application/pdf")},
         )
 
     assert response.status_code == 413
     assert response.json()["error"]["code"] == "payload_too_large"
-    assert list(tmp_path.iterdir()) == []
+    assert list(authenticated_api["upload_dir"].iterdir()) == []
 
 
 def test_upload_stream_failure_removes_partial_file(tmp_path):
@@ -230,9 +236,8 @@ def test_upload_stream_failure_removes_partial_file(tmp_path):
             return super().read(5)
 
     upload = UploadFile(file=FailingStream(), filename="broken.pdf")
-    with patch.object(api, "UPLOAD_DIR", tmp_path):
-        with pytest.raises(UploadStorageError):
-            api.upload_document(upload)
+    with pytest.raises(UploadStorageError):
+        api.store_validated_pdf(upload, tmp_path)
 
     assert list(tmp_path.iterdir()) == []
 

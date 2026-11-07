@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pymupdf
 from fastapi.testclient import TestClient
+from uuid import uuid4
 
 import api
 
@@ -17,27 +18,26 @@ def test_liveness_does_not_require_external_services():
     assert response.json() == {"status": "ok"}
 
 
-def test_ask_rejects_whitespace_question_without_calling_model():
+def test_ask_rejects_whitespace_question_without_calling_model(authenticated_api):
     with patch("api.answer_question") as answer_question:
-        response = TestClient(api.app).post("/ask", json={"question": "   "})
+        response = authenticated_api["client"].post(
+            "/ask",
+            headers=authenticated_api["headers"],
+            json={"question": "   "},
+        )
 
     assert response.status_code == 422
     answer_question.assert_not_called()
 
 
-def test_compare_rejects_unknown_document_without_model_call():
-    with (
-        patch(
-            "api.list_documents",
-            return_value=[{"sha256": HASH_A, "filename": "a.pdf"}],
-        ),
-        patch("api.compare_documents") as compare_documents,
-    ):
-        response = TestClient(api.app).post(
+def test_compare_rejects_unknown_document_without_model_call(authenticated_api):
+    with patch("api.compare_documents") as compare_documents:
+        response = authenticated_api["client"].post(
             "/compare/documents",
+            headers=authenticated_api["headers"],
             json={
-                "document_a": HASH_A,
-                "document_b": HASH_B,
+                "document_a": str(uuid4()),
+                "document_b": str(uuid4()),
                 "question": "Compare the evidence",
             },
         )
@@ -46,10 +46,11 @@ def test_compare_rejects_unknown_document_without_model_call():
     compare_documents.assert_not_called()
 
 
-def test_campaign_comparison_rejects_oversized_question():
+def test_campaign_comparison_rejects_oversized_question(authenticated_api):
     with patch("api.compare_campaigns") as compare_campaigns:
-        response = TestClient(api.app).post(
+        response = authenticated_api["client"].post(
             "/compare/campaigns",
+            headers=authenticated_api["headers"],
             json={"question": "x" * 1001},
         )
 
@@ -58,24 +59,14 @@ def test_campaign_comparison_rejects_oversized_question():
     compare_campaigns.assert_not_called()
 
 
-def test_document_comparison_rejects_oversized_question():
-    hash_a = "a" * 64
-    hash_b = "b" * 64
-    with (
-        patch(
-            "api.list_documents",
-            return_value=[
-                {"sha256": hash_a, "filename": "a.pdf"},
-                {"sha256": hash_b, "filename": "b.pdf"},
-            ],
-        ),
-        patch("api.compare_documents") as compare_documents,
-    ):
-        response = TestClient(api.app).post(
+def test_document_comparison_rejects_oversized_question(authenticated_api):
+    with patch("api.compare_documents") as compare_documents:
+        response = authenticated_api["client"].post(
             "/compare/documents",
+            headers=authenticated_api["headers"],
             json={
-                "document_a": hash_a,
-                "document_b": hash_b,
+                "document_a": str(uuid4()),
+                "document_b": str(uuid4()),
                 "question": "x" * 1001,
             },
         )
@@ -85,21 +76,21 @@ def test_document_comparison_rejects_oversized_question():
     compare_documents.assert_not_called()
 
 
-def test_upload_rejects_malformed_pdf_and_removes_temporary_file(tmp_path):
-    with patch.object(api, "UPLOAD_DIR", tmp_path):
-        response = TestClient(api.app).post(
-            "/documents/upload",
-            files={"file": ("fake.pdf", b"not a pdf", "application/pdf")},
-        )
+def test_upload_rejects_malformed_pdf_and_removes_temporary_file(authenticated_api):
+    response = authenticated_api["client"].post(
+        "/documents/upload",
+        headers=authenticated_api["headers"],
+        files={"file": ("fake.pdf", b"not a pdf", "application/pdf")},
+    )
 
     assert response.status_code == 422
     assert response.json()["error"]["message"] == (
         "Uploaded file is not a readable PDF"
     )
-    assert list(tmp_path.iterdir()) == []
+    assert list(authenticated_api["upload_dir"].iterdir()) == []
 
 
-def test_upload_indexes_valid_pdf_without_real_embeddings(tmp_path):
+def test_upload_indexes_valid_pdf_without_real_embeddings(authenticated_api):
     document = pymupdf.open()
     page = document.new_page()
     page.insert_text((72, 72), "Mars sample science")
@@ -107,14 +98,14 @@ def test_upload_indexes_valid_pdf_without_real_embeddings(tmp_path):
     document.close()
 
     with (
-        patch.object(api, "UPLOAD_DIR", tmp_path),
         patch(
             "api.index_uploaded_pdf",
             return_value={"status": "indexed", "chunks": 1},
         ),
     ):
-        response = TestClient(api.app).post(
+        response = authenticated_api["client"].post(
             "/documents/upload",
+            headers=authenticated_api["headers"],
             files={"file": ("mars.pdf", content, "application/pdf")},
         )
 

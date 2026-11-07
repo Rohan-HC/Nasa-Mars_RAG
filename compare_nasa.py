@@ -88,7 +88,11 @@ Comparison:
 """
 
 
-def compare_campaigns(question: str) -> dict:
+def compare_campaigns(
+    question: str,
+    *,
+    allowed_version_ids: list[str] | None = None,
+) -> dict:
     total_started = perf_counter()
     all_results = []
     retrieval_ms = 0.0
@@ -101,6 +105,7 @@ def compare_campaigns(question: str) -> dict:
             question=search["question"],
             k=search["k"],
             filename=search["filename"],
+            version_ids=allowed_version_ids,
         )
         retrieval_ms += (perf_counter() - retrieval_started) * 1000
 

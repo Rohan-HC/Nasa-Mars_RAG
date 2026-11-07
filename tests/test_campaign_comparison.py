@@ -8,7 +8,7 @@ import compare_nasa
 from service_errors import ModelTimeoutError
 
 
-def fake_search(*, question, k, filename):
+def fake_search(*, question, k, filename, version_ids=None):
     return [
         (
             Document(

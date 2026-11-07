@@ -18,6 +18,9 @@ def index_uploaded_pdf(
     pdf_path: Path,
     file_hash: str,
     original_name: str,
+    *,
+    document_id: str | None = None,
+    version_id: str | None = None,
 ) -> dict:
     documents = []
     heading_pattern = re.compile(
@@ -59,6 +62,8 @@ def index_uploaded_pdf(
                             "sha256": file_hash,
                             "source": str(pdf_path),
                             "section": section,
+                            **({"document_id": document_id} if document_id else {}),
+                            **({"version_id": version_id} if version_id else {}),
                         },
                     )
                 )
@@ -72,9 +77,12 @@ def index_uploaded_pdf(
     if not chunks:
         raise ValueError("No extractable text found")
 
-    ids = [
-        f"{file_hash}:{INDEX_VERSION}:{index}" for index in range(1, len(chunks) + 1)
-    ]
+    id_prefix = (
+        f"{document_id}:{version_id}:{INDEX_VERSION}"
+        if document_id and version_id
+        else f"{file_hash}:{INDEX_VERSION}"
+    )
+    ids = [f"{id_prefix}:{index}" for index in range(1, len(chunks) + 1)]
     expected_ids = set(ids)
 
     store = Chroma(
@@ -83,12 +91,12 @@ def index_uploaded_pdf(
         persist_directory=DB_PATH,
     )
 
-    existing_ids = set(
-        store.get(
-            where={"sha256": file_hash},
-            include=[],
-        )["ids"]
+    lookup_filter = (
+        {"version_id": version_id}
+        if version_id
+        else {"sha256": file_hash}
     )
+    existing_ids = set(store.get(where=lookup_filter, include=[])["ids"])
 
     if existing_ids == expected_ids:
         return {

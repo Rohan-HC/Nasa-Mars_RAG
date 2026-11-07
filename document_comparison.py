@@ -39,6 +39,9 @@ def compare_documents(
     question: str,
     document_a: str,
     document_b: str,
+    *,
+    version_ids: dict[str, str] | None = None,
+    filenames: dict[str, str] | None = None,
 ) -> dict:
     total_started = perf_counter()
 
@@ -52,7 +55,13 @@ def compare_documents(
     if document_a == document_b:
         raise ValueError("Select two different documents")
 
-    catalog = {document["sha256"]: document for document in list_documents()}
+    if version_ids is not None and filenames is not None:
+        catalog = {
+            document_id: {"filename": filenames[document_id]}
+            for document_id in (document_a, document_b)
+        }
+    else:
+        catalog = {document["sha256"]: document for document in list_documents()}
 
     if document_a not in catalog or document_b not in catalog:
         raise ValueError("Selected document not found")
@@ -72,7 +81,10 @@ def compare_documents(
             search_nasa,
             question=question,
             k=2,
-            sha256=file_hash,
+            sha256=file_hash if version_ids is None else None,
+            version_ids=(
+                [version_ids[file_hash]] if version_ids is not None else None
+            ),
         )
         retrieval_ms += (perf_counter() - retrieval_started) * 1000
 
@@ -114,6 +126,10 @@ def compare_documents(
                     "label": label,
                     "filename": filename,
                     "sha256": file_hash,
+                    "document_id": file_hash if version_ids is not None else None,
+                    "version_id": (
+                        version_ids[file_hash] if version_ids is not None else None
+                    ),
                     "page": page,
                     "distance": distance,
                     "text": document.page_content,

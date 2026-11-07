@@ -1,37 +1,113 @@
+from __future__ import annotations
+
 import hashlib
 import logging
 import traceback
+from collections.abc import Callable, Iterator
+from datetime import timedelta
 from pathlib import Path
 from time import perf_counter
-from uuid import uuid4
+from typing import Annotated, Literal
+from uuid import UUID, uuid4
 
 import pymupdf
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from compare_nasa import compare_campaigns
-from document_catalog import list_documents
 from document_comparison import compare_documents
 from document_indexer import index_uploaded_pdf
 from health_checks import check_readiness
 from logging_config import configure_logging
+from nasa_rag.auth import AuthenticationError, authenticate_user
+from nasa_rag.catalog import CatalogRepository, DocumentAccessError
+from nasa_rag.config import Settings
+from nasa_rag.db import Database
+from nasa_rag.models import User
+from nasa_rag.rate_limit import SlidingWindowRateLimiter
+from nasa_rag.security import InvalidTokenError, TokenService
 from rag_nasa import answer_question
 from service_errors import IndexingFailedError, ServiceError, UploadStorageError
 
+
 configure_logging()
 logger = logging.getLogger(__name__)
+bearer = HTTPBearer(auto_error=False)
+MAX_FILE_SIZE = 10 * 1024 * 1024
+
+
+def store_validated_pdf(
+    file: UploadFile,
+    upload_dir: Path,
+    *,
+    max_file_size: int | None = None,
+) -> tuple[Path, str, int, int]:
+    """Persist and validate one PDF, removing partial files on every failure."""
+    limit = MAX_FILE_SIZE if max_file_size is None else max_file_size
+    original_name = file.filename or ""
+    if Path(original_name.replace("\\", "/")).suffix.lower() != ".pdf":
+        raise HTTPException(status_code=415, detail="Only PDF files are allowed")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    destination = upload_dir / f"{uuid4().hex}.pdf"
+    hasher = hashlib.sha256()
+    try:
+        total_bytes = 0
+        with destination.open("wb") as output:
+            while block := file.file.read(1024 * 1024):
+                total_bytes += len(block)
+                if total_bytes > limit:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="Uploaded file exceeds the 10 MB limit",
+                    )
+                hasher.update(block)
+                output.write(block)
+        with pymupdf.open(stream=destination.read_bytes(), filetype="pdf") as pdf:
+            page_count = len(pdf)
+            if page_count == 0:
+                raise ValueError("PDF has no pages")
+    except HTTPException:
+        destination.unlink(missing_ok=True)
+        raise
+    except (pymupdf.FileDataError, ValueError):
+        destination.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=422, detail="Uploaded file is not a readable PDF"
+        )
+    except OSError as error:
+        destination.unlink(missing_ok=True)
+        raise UploadStorageError() from error
+    finally:
+        file.file.close()
+    return destination, hasher.hexdigest(), page_count, total_bytes
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+    document_ids: list[UUID] | None = Field(default=None, max_length=20)
 
 
 class CompareRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
 
 
-app = FastAPI(
-    title="NASA Mars RAG API",
-    version="0.2.0",
-)
+class CompareDocumentsRequest(BaseModel):
+    document_a: UUID
+    document_b: UUID
+    question: str = Field(min_length=1, max_length=1000)
+
+
+class PermissionRequest(BaseModel):
+    role: Literal["reader"]
 
 
 def _request_id(request: Request) -> str:
@@ -57,315 +133,480 @@ def _error_response(
         },
     )
     response.headers["X-Request-ID"] = request_id
+    if status_code == 401:
+        response.headers["WWW-Authenticate"] = "Bearer"
     return response
 
 
-@app.middleware("http")
-async def observe_request(request: Request, call_next):
-    request_id = uuid4().hex
-    request.state.request_id = request_id
-    started = perf_counter()
-    request.state.started_at = started
-    response = await call_next(request)
-    duration_ms = round((perf_counter() - started) * 1000, 2)
-    response.headers["X-Request-ID"] = request_id
-    response.headers["X-Response-Time-Ms"] = str(duration_ms)
-    logger.info(
-        "request_complete",
-        extra={
-            "request_id": request_id,
-            "method": request.method,
-            "path": request.url.path,
-            "status_code": response.status_code,
-            "duration_ms": duration_ms,
-        },
-    )
-    return response
+def get_session(request: Request) -> Iterator[Session]:
+    with request.app.state.database.session() as session:
+        yield session
 
 
-@app.exception_handler(ServiceError)
-async def service_error_handler(request: Request, error: ServiceError):
-    logger.warning(
-        "service_error",
-        extra={
-            "request_id": _request_id(request),
-            "error_code": error.code,
-            "error_type": type(error).__name__,
-        },
-    )
-    return _error_response(
-        request,
-        status_code=error.status_code,
-        code=error.code,
-        message=error.message,
-    )
-
-
-@app.exception_handler(HTTPException)
-async def http_error_handler(request: Request, error: HTTPException):
-    codes = {
-        404: "not_found",
-        413: "payload_too_large",
-        415: "unsupported_media_type",
-        422: "validation_error",
-        503: "service_unavailable",
-    }
-    return _error_response(
-        request,
-        status_code=error.status_code,
-        code=codes.get(error.status_code, "request_error"),
-        message=str(error.detail),
-    )
-
-
-@app.exception_handler(RequestValidationError)
-async def request_validation_error_handler(
+def get_current_user(
     request: Request,
-    error: RequestValidationError,
-):
-    return _error_response(
-        request,
-        status_code=422,
-        code="validation_error",
-        message="Request validation failed",
-    )
-
-
-@app.exception_handler(Exception)
-async def unexpected_error_handler(request: Request, error: Exception):
-    duration_ms = round(
-        (perf_counter() - getattr(request.state, "started_at", perf_counter())) * 1000,
-        2,
-    )
-    traceback_frames = traceback.extract_tb(error.__traceback__)
-    error_location = None
-    if traceback_frames:
-        final_frame = traceback_frames[-1]
-        error_location = (
-            f"{Path(final_frame.filename).name}:"
-            f"{final_frame.lineno}:{final_frame.name}"
-        )
-    logger.error(
-        "unexpected_error",
-        extra={
-            "request_id": _request_id(request),
-            "error_code": "internal_error",
-            "error_type": type(error).__name__,
-            "error_location": error_location,
-        },
-    )
-    response = _error_response(
-        request,
-        status_code=500,
-        code="internal_error",
-        message="An unexpected server error occurred",
-    )
-    response.headers["X-Response-Time-Ms"] = str(duration_ms)
-    logger.info(
-        "request_complete",
-        extra={
-            "request_id": _request_id(request),
-            "method": request.method,
-            "path": request.url.path,
-            "status_code": 500,
-            "duration_ms": duration_ms,
-            "error_type": type(error).__name__,
-        },
-    )
-    return response
-
-
-@app.post("/compare/campaigns")
-def compare_nasa_campaigns(request: CompareRequest):
-    question = request.question.strip()
-
-    if not question:
-        raise HTTPException(
-            status_code=422,
-            detail="Question cannot be empty",
-        )
-
-    return compare_campaigns(question)
-
-
-class CompareDocumentsRequest(BaseModel):
-    document_a: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
-    document_b: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
-    question: str = Field(min_length=1, max_length=1000)
-
-
-@app.post("/compare/documents")
-def compare_selected_documents(request: CompareDocumentsRequest):
-    document_a = request.document_a.lower()
-    document_b = request.document_b.lower()
-
-    if document_a == document_b:
-        raise HTTPException(
-            status_code=422,
-            detail="Select two different documents",
-        )
-
-    available = {document["sha256"] for document in list_documents()}
-
-    if document_a not in available or document_b not in available:
-        raise HTTPException(
-            status_code=404,
-            detail="One or both documents were not found",
-        )
-
-    if not request.question.strip():
-        raise HTTPException(
-            status_code=422,
-            detail="Question cannot be empty",
-        )
-
-    return compare_documents(
-        question=request.question,
-        document_a=document_a,
-        document_b=document_b,
-    )
-
-
-@app.get("/", include_in_schema=False)
-def home():
-    html_path = Path(__file__).resolve().parent / "web" / "index.html"
-    return FileResponse(html_path)
-
-
-@app.get("/documents")
-def get_documents():
-    documents = list_documents()
-
-    return {
-        "count": len(documents),
-        "documents": documents,
-    }
-
-
-class AskRequest(BaseModel):
-    question: str = Field(min_length=1, max_length=1000)
-
-
-@app.get("/health")
-@app.get("/health/live")
-def liveness():
-    return {"status": "ok"}
-
-
-@app.get("/health/ready")
-def readiness():
-    result = check_readiness()
-    status = "ready" if result["ready"] else "not_ready"
-    return JSONResponse(
-        status_code=200 if result["ready"] else 503,
-        content={"status": status, **result},
-    )
-
-
-@app.post("/ask")
-def ask(request: AskRequest):
-    question = request.question.strip()
-
-    if not question:
-        raise HTTPException(
-            status_code=422,
-            detail="Question must not be empty",
-        )
-
-    result = answer_question(question)
-    return result
-
-
-UPLOAD_DIR = Path("data/uploads")
-MAX_FILE_SIZE = 10 * 1024 * 1024
-
-
-@app.post("/documents/upload", status_code=201)
-def upload_document(file: UploadFile = File(...)):
-    hasher = hashlib.sha256()
-    original_name = file.filename or ""
-
-    if Path(original_name.replace("\\", "/")).suffix.lower() != ".pdf":
-        raise HTTPException(status_code=415, detail="Only PDF files are allowed")
-
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-    document_id = uuid4().hex
-    destination = UPLOAD_DIR / f"{document_id}.pdf"
-
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+    session: Annotated[Session, Depends(get_session)],
+) -> User:
+    if credentials is None or credentials.scheme.casefold() != "bearer":
+        raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        total_bytes = 0
+        user_id = request.app.state.token_service.verify(credentials.credentials)
+    except InvalidTokenError as error:
+        raise HTTPException(status_code=401, detail="Authentication required") from error
+    user = CatalogRepository(session).get_active_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user
 
-        with destination.open("wb") as output:
-            while block := file.file.read(1024 * 1024):
-                hasher.update(block)
-                total_bytes += len(block)
 
-                if total_bytes > MAX_FILE_SIZE:
-                    raise HTTPException(
-                        status_code=413,
-                        detail="Uploaded file exceeds the 10 MB limit",
-                    )
+def _default_answer_function(*, question: str, allowed_version_ids: list[str]):
+    return answer_question(question, allowed_version_ids=allowed_version_ids)
 
-                output.write(block)
 
-        # Verify that PyMuPDF can actually open the file.
-        with pymupdf.open(stream=destination.read_bytes(), filetype="pdf") as pdf:
-            page_count = len(pdf)
+def _default_comparison_function(**kwargs):
+    return compare_documents(**kwargs)
 
-            if page_count == 0:
-                raise ValueError("PDF has no pages")
 
-    except HTTPException:
-        destination.unlink(missing_ok=True)
-        raise
+def create_app(
+    *,
+    database: Database | None = None,
+    token_service: TokenService | None = None,
+    answer_function: Callable | None = None,
+    comparison_function: Callable | None = None,
+    upload_dir: Path | None = None,
+    login_limiter: SlidingWindowRateLimiter | None = None,
+    user_limiter: SlidingWindowRateLimiter | None = None,
+) -> FastAPI:
+    settings = Settings.from_env()
+    application = FastAPI(title="NASA Mars RAG API", version="0.3.0")
+    application.state.database = database or Database(settings.database_url)
+    application.state.token_service = token_service or TokenService(
+        settings.jwt_secret,
+        lifetime=timedelta(minutes=settings.access_token_minutes),
+    )
+    application.state.answer_function = answer_function or _default_answer_function
+    application.state.comparison_function = (
+        comparison_function or _default_comparison_function
+    )
+    application.state.upload_dir = upload_dir or settings.upload_dir
+    application.state.access_token_seconds = settings.access_token_minutes * 60
+    application.state.login_limiter = login_limiter or SlidingWindowRateLimiter(
+        limit=10,
+        window_seconds=60,
+    )
+    application.state.user_limiter = user_limiter or SlidingWindowRateLimiter(
+        limit=60,
+        window_seconds=60,
+    )
 
-    except (pymupdf.FileDataError, ValueError):
-        destination.unlink(missing_ok=True)
-        raise HTTPException(
-            status_code=422, detail="Uploaded file is not a readable PDF"
+    def enforce_user_limit(request: Request, user: User) -> None:
+        if not request.app.state.user_limiter.allow(user.id):
+            raise HTTPException(status_code=429, detail="Too many requests")
+
+    @application.middleware("http")
+    async def observe_request(request: Request, call_next):
+        request_id = uuid4().hex
+        request.state.request_id = request_id
+        started = perf_counter()
+        request.state.started_at = started
+        try:
+            response = await call_next(request)
+        except Exception as error:
+            duration_ms = round((perf_counter() - started) * 1000, 2)
+            logger.info(
+                "request_complete",
+                extra={
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": 500,
+                    "duration_ms": duration_ms,
+                    "error_type": type(error).__name__,
+                },
+            )
+            raise
+        duration_ms = round((perf_counter() - started) * 1000, 2)
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-Response-Time-Ms"] = str(duration_ms)
+        logger.info(
+            "request_complete",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+            },
+        )
+        return response
+
+    @application.exception_handler(ServiceError)
+    async def service_error_handler(request: Request, error: ServiceError):
+        logger.warning(
+            "service_error",
+            extra={
+                "request_id": _request_id(request),
+                "error_code": error.code,
+                "error_type": type(error).__name__,
+            },
+        )
+        return _error_response(
+            request,
+            status_code=error.status_code,
+            code=error.code,
+            message=error.message,
         )
 
-    except OSError as error:
-        destination.unlink(missing_ok=True)
-        raise UploadStorageError() from error
-
-    finally:
-        file.file.close()
-
-    file_hash = hasher.hexdigest()
-
-    try:
-        index_result = index_uploaded_pdf(
-            pdf_path=destination,
-            file_hash=file_hash,
-            original_name=original_name,
+    @application.exception_handler(HTTPException)
+    async def http_error_handler(request: Request, error: HTTPException):
+        codes = {
+            401: "authentication_required",
+            403: "forbidden",
+            404: "not_found",
+            409: "conflict",
+            413: "payload_too_large",
+            415: "unsupported_media_type",
+            422: "validation_error",
+            429: "rate_limited",
+            503: "service_unavailable",
+        }
+        return _error_response(
+            request,
+            status_code=error.status_code,
+            code=codes.get(error.status_code, "request_error"),
+            message=str(error.detail),
         )
 
-    except ValueError as error:
-        destination.unlink(missing_ok=True)
-        raise HTTPException(
+    @application.exception_handler(RequestValidationError)
+    async def request_validation_error_handler(
+        request: Request,
+        _error: RequestValidationError,
+    ):
+        return _error_response(
+            request,
             status_code=422,
-            detail=str(error),
-        ) from error
+            code="validation_error",
+            message="Request validation failed",
+        )
 
-    except Exception as error:
-        destination.unlink(missing_ok=True)
+    @application.exception_handler(Exception)
+    async def unexpected_error_handler(request: Request, error: Exception):
+        duration_ms = round(
+            (perf_counter() - getattr(request.state, "started_at", perf_counter()))
+            * 1000,
+            2,
+        )
+        frames = traceback.extract_tb(error.__traceback__)
+        location = None
+        if frames:
+            frame = frames[-1]
+            location = f"{Path(frame.filename).name}:{frame.lineno}:{frame.name}"
         logger.error(
-            "indexing_failed",
-            extra={"error_type": type(error).__name__},
+            "unexpected_error",
+            extra={
+                "request_id": _request_id(request),
+                "error_code": "internal_error",
+                "error_type": type(error).__name__,
+                "error_location": location,
+            },
         )
-        raise IndexingFailedError() from error
+        response = _error_response(
+            request,
+            status_code=500,
+            code="internal_error",
+            message="An unexpected server error occurred",
+        )
+        response.headers["X-Response-Time-Ms"] = str(duration_ms)
+        return response
 
-    if index_result["status"] == "already_indexed":
-        destination.unlink(missing_ok=True)
+    @application.get("/", include_in_schema=False)
+    def home():
+        return FileResponse(Path(__file__).resolve().parent / "web" / "index.html")
 
-    return {
-        "document_id": document_id,
-        "filename": original_name,
-        "sha256": file_hash,
-        "pages": page_count,
-        "size_bytes": total_bytes,
-        "index_status": index_result["status"],
-        "chunks": index_result["chunks"],
-    }
+    @application.get("/health")
+    @application.get("/health/live")
+    def liveness():
+        return {"status": "ok"}
+
+    @application.get("/health/ready")
+    def readiness():
+        result = check_readiness()
+        status = "ready" if result["ready"] else "not_ready"
+        return JSONResponse(
+            status_code=200 if result["ready"] else 503,
+            content={"status": status, **result},
+        )
+
+    @application.post("/auth/token")
+    def login(request: Request, body: LoginRequest):
+        client_host = request.client.host if request.client else "unknown"
+        if not request.app.state.login_limiter.allow(client_host):
+            raise HTTPException(status_code=429, detail="Too many login attempts")
+        try:
+            with request.app.state.database.session() as session:
+                user = authenticate_user(
+                    session,
+                    username=body.username,
+                    password=body.password,
+                )
+                token = request.app.state.token_service.issue(user.id)
+        except AuthenticationError as error:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid username or password",
+            ) from error
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "expires_in": request.app.state.access_token_seconds,
+        }
+
+    @application.get("/auth/me")
+    def auth_me(current_user: Annotated[User, Depends(get_current_user)]):
+        return {"user_id": current_user.id, "username": current_user.username}
+
+    @application.get("/documents")
+    def get_documents(
+        current_user: Annotated[User, Depends(get_current_user)],
+        session: Annotated[Session, Depends(get_session)],
+    ):
+        documents = CatalogRepository(session).list_accessible_documents(
+            current_user.id
+        )
+        payload = [
+            {
+                "document_id": document.id,
+                "name": document.name,
+                "status": document.status,
+                "role": "owner" if document.owner_id == current_user.id else "reader",
+            }
+            for document in documents
+        ]
+        return {"count": len(payload), "documents": payload}
+
+    @application.get("/documents/{document_id}")
+    def get_document(
+        document_id: UUID,
+        current_user: Annotated[User, Depends(get_current_user)],
+        session: Annotated[Session, Depends(get_session)],
+    ):
+        catalog = CatalogRepository(session)
+        try:
+            document = catalog.require_document(current_user.id, str(document_id))
+        except DocumentAccessError as error:
+            raise HTTPException(status_code=404, detail="Document not found") from error
+        version = catalog.get_version(document.active_version_id)
+        return {
+            "document_id": document.id,
+            "name": document.name,
+            "status": document.status,
+            "role": "owner" if document.owner_id == current_user.id else "reader",
+            "active_version": (
+                {
+                    "version_id": version.id,
+                    "sha256": version.content_sha256,
+                    "pages": version.page_count,
+                    "chunks": version.chunk_count,
+                }
+                if version is not None
+                else None
+            ),
+        }
+
+    @application.put("/documents/{document_id}/permissions/{username}")
+    def grant_permission(
+        document_id: UUID,
+        username: str,
+        body: PermissionRequest,
+        current_user: Annotated[User, Depends(get_current_user)],
+        session: Annotated[Session, Depends(get_session)],
+    ):
+        catalog = CatalogRepository(session)
+        try:
+            catalog.require_document(current_user.id, str(document_id), owner=True)
+        except DocumentAccessError as error:
+            raise HTTPException(status_code=404, detail="Document not found") from error
+        target = catalog.get_user_by_username(username)
+        if target is None:
+            raise HTTPException(status_code=404, detail="Document or user not found")
+        try:
+            catalog.grant_reader(current_user.id, str(document_id), target.id)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Reader cannot be granted") from error
+        return {
+            "document_id": str(document_id),
+            "username": target.username,
+            "role": body.role,
+        }
+
+    @application.delete(
+        "/documents/{document_id}/permissions/{username}", status_code=204
+    )
+    def revoke_permission(
+        document_id: UUID,
+        username: str,
+        current_user: Annotated[User, Depends(get_current_user)],
+        session: Annotated[Session, Depends(get_session)],
+    ):
+        catalog = CatalogRepository(session)
+        try:
+            catalog.require_document(current_user.id, str(document_id), owner=True)
+        except DocumentAccessError as error:
+            raise HTTPException(status_code=404, detail="Document not found") from error
+        target = catalog.get_user_by_username(username)
+        if target is not None:
+            catalog.revoke_reader(current_user.id, str(document_id), target.id)
+        return Response(status_code=204)
+
+    @application.post("/ask")
+    def ask(
+        request: Request,
+        body: AskRequest,
+        current_user: Annotated[User, Depends(get_current_user)],
+        session: Annotated[Session, Depends(get_session)],
+    ):
+        enforce_user_limit(request, current_user)
+        question = body.question.strip()
+        if not question:
+            raise HTTPException(status_code=422, detail="Question must not be empty")
+        catalog = CatalogRepository(session)
+        requested = (
+            [str(document_id) for document_id in body.document_ids]
+            if body.document_ids is not None
+            else None
+        )
+        if requested is not None:
+            for document_id in requested:
+                try:
+                    catalog.require_document(current_user.id, document_id)
+                except DocumentAccessError as error:
+                    raise HTTPException(
+                        status_code=404, detail="Document not found"
+                    ) from error
+        allowed_versions = catalog.allowed_active_version_ids(
+            current_user.id,
+            requested,
+        )
+        return request.app.state.answer_function(
+            question=question,
+            allowed_version_ids=allowed_versions,
+        )
+
+    @application.post("/compare/documents")
+    def compare_selected_documents(
+        request: Request,
+        body: CompareDocumentsRequest,
+        current_user: Annotated[User, Depends(get_current_user)],
+        session: Annotated[Session, Depends(get_session)],
+    ):
+        enforce_user_limit(request, current_user)
+        document_a = str(body.document_a)
+        document_b = str(body.document_b)
+        if document_a == document_b:
+            raise HTTPException(status_code=422, detail="Select two different documents")
+        catalog = CatalogRepository(session)
+        try:
+            first = catalog.require_document(current_user.id, document_a)
+            second = catalog.require_document(current_user.id, document_b)
+            first_version = catalog.active_version_for_document(
+                current_user.id, document_a
+            )
+            second_version = catalog.active_version_for_document(
+                current_user.id, document_b
+            )
+        except DocumentAccessError as error:
+            raise HTTPException(
+                status_code=404,
+                detail="One or both documents were not found",
+            ) from error
+        return request.app.state.comparison_function(
+            question=body.question.strip(),
+            document_a=document_a,
+            document_b=document_b,
+            version_ids={
+                document_a: first_version.id,
+                document_b: second_version.id,
+            },
+            filenames={document_a: first.name, document_b: second.name},
+        )
+
+    @application.post("/compare/campaigns")
+    def compare_nasa_campaigns(
+        body: CompareRequest,
+        current_user: Annotated[User, Depends(get_current_user)],
+        session: Annotated[Session, Depends(get_session)],
+    ):
+        versions = CatalogRepository(session).allowed_active_version_ids(
+            current_user.id
+        )
+        return compare_campaigns(
+            body.question.strip(),
+            allowed_version_ids=versions,
+        )
+
+    @application.post("/documents/upload", status_code=201)
+    def upload_document(
+        request: Request,
+        current_user: Annotated[User, Depends(get_current_user)],
+        file: UploadFile = File(...),
+    ):
+        enforce_user_limit(request, current_user)
+        original_name = file.filename or ""
+        destination, file_hash, page_count, total_bytes = store_validated_pdf(
+            file,
+            request.app.state.upload_dir,
+        )
+        with request.app.state.database.session() as session:
+            catalog = CatalogRepository(session)
+            document = catalog.create_document(current_user.id, original_name)
+            version = catalog.create_version(
+                document.id,
+                content_sha256=file_hash,
+                filename=original_name,
+                storage_path=str(destination),
+            )
+            document_id = document.id
+            version_id = version.id
+        try:
+            index_result = index_uploaded_pdf(
+                pdf_path=destination,
+                file_hash=file_hash,
+                original_name=original_name,
+                document_id=document_id,
+                version_id=version_id,
+            )
+            with request.app.state.database.session() as session:
+                catalog = CatalogRepository(session)
+                catalog.mark_version_indexed(
+                    version_id,
+                    page_count=page_count,
+                    chunk_count=index_result["chunks"],
+                )
+                catalog.activate_version(document_id, version_id)
+        except ValueError as error:
+            destination.unlink(missing_ok=True)
+            with request.app.state.database.session() as session:
+                CatalogRepository(session).mark_version_failed(version_id)
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except Exception as error:
+            destination.unlink(missing_ok=True)
+            with request.app.state.database.session() as session:
+                CatalogRepository(session).mark_version_failed(version_id)
+            logger.error("indexing_failed", extra={"error_type": type(error).__name__})
+            raise IndexingFailedError() from error
+        return {
+            "document_id": document_id,
+            "version_id": version_id,
+            "filename": original_name,
+            "sha256": file_hash,
+            "pages": page_count,
+            "size_bytes": total_bytes,
+            "index_status": index_result["status"],
+            "chunks": index_result["chunks"],
+        }
+
+    return application
+
+
+app = create_app()

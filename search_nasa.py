@@ -13,6 +13,7 @@ def search_nasa(
     k: int = 3,
     filename: str | None = None,
     sha256: str | None = None,
+    version_ids: list[str] | None = None,
 ):
     question = question.strip()
 
@@ -21,6 +22,9 @@ def search_nasa(
 
     if k < 1:
         raise ValueError("k must be at least 1")
+
+    if not version_ids:
+        return []
 
     if not Path(DB_PATH).exists():
         raise FileNotFoundError("NASA vector database not found")
@@ -34,6 +38,7 @@ def search_nasa(
     )
 
     filters = [{"section": "content"}]
+    filters.append({"version_id": {"$in": sorted(set(version_ids))}})
 
     if filename:
         filters.append({"filename": filename})

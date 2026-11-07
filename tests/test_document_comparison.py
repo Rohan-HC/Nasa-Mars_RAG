@@ -14,7 +14,7 @@ def test_comparison_replaces_uncited_claims_with_insufficient_evidence(caplog):
     model = Mock()
     model.invoke.return_value = Mock(content="The documents report different rocks.")
 
-    def search(*, question, k, sha256):
+    def search(*, question, k, sha256=None, version_ids=None):
         filename = "a.pdf" if sha256 == HASH_A else "b.pdf"
         return [
             (
