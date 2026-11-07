@@ -120,11 +120,13 @@ class IndexingService:
         dense_index: DenseIndex,
         *,
         index_schema_version: str = INDEX_SCHEMA_VERSION,
+        storage_root: Path | None = None,
     ):
         self.database = database
         self.extractor = extractor
         self.dense_index = dense_index
         self.index_schema_version = index_schema_version
+        self.storage_root = storage_root.resolve() if storage_root else None
 
     def prepare_new_document(
         self,
@@ -154,6 +156,7 @@ class IndexingService:
         document_id: str,
         storage_path: Path,
         content_sha256: str,
+        check_integrity: bool = True,
     ) -> IndexingPlan:
         with self.database.session() as session:
             catalog = CatalogRepository(session)
@@ -164,9 +167,12 @@ class IndexingService:
                 active is not None
                 and active.content_sha256 == content_sha256
                 and active.index_schema_version == self.index_schema_version
-                and self._integrity_established(catalog, active.id, active.chunk_count)
             ):
-                return IndexingPlan(document.id, active.id, "skip")
+                if check_integrity and self._integrity_established(
+                    catalog, active.id, active.chunk_count
+                ):
+                    return IndexingPlan(document.id, active.id, "skip")
+                return IndexingPlan(document.id, active.id, "index")
 
             version = catalog.find_version(
                 document.id,
@@ -280,12 +286,16 @@ class IndexingService:
 
     def delete_document(self, owner_id: str, document_id: str) -> bool:
         with self.database.session() as session:
-            version_ids = CatalogRepository(session).soft_delete_document(
-                owner_id, document_id
-            )
+            catalog = CatalogRepository(session)
+            document = catalog.require_document(owner_id, document_id, owner=True)
+            versions = catalog.all_versions_for_document(document.id)
+            version_ids = catalog.soft_delete_document(owner_id, document_id)
+            storage_paths = [Path(version.storage_path) for version in versions]
         cleanup_results = [
             self._cleanup_version(version_id) for version_id in version_ids
         ]
+        for storage_path in storage_paths:
+            self._remove_managed_source(storage_path)
         return all(cleanup_results)
 
     def reconcile_derived_data(self) -> int:
@@ -352,6 +362,20 @@ class IndexingService:
             catalog = CatalogRepository(session)
             catalog.delete_chunks(version_id)
             catalog.mark_derived_cleaned(version_id)
+        return True
+
+    def _remove_managed_source(self, path: Path) -> bool:
+        if self.storage_root is None:
+            return False
+        try:
+            resolved = path.resolve()
+            resolved.relative_to(self.storage_root)
+        except (OSError, ValueError):
+            return False
+        try:
+            resolved.unlink(missing_ok=True)
+        except OSError:
+            return False
         return True
 
     @staticmethod

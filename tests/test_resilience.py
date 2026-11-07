@@ -179,9 +179,11 @@ def test_unexpected_error_does_not_expose_sensitive_detail(
     assert completion.error_type == "RuntimeError"
 
 
-def test_failed_indexing_removes_uploaded_pdf(authenticated_api):
-    with patch(
-        "api.index_uploaded_pdf", side_effect=RuntimeError("index failed")
+def test_failed_job_enqueue_removes_uploaded_pdf(authenticated_api):
+    with patch.object(
+        authenticated_api["app"].state.job_queue,
+        "enqueue",
+        side_effect=RuntimeError("queue failed"),
     ):
         response = authenticated_api["client"].post(
             "/documents/upload",
@@ -190,23 +192,21 @@ def test_failed_indexing_removes_uploaded_pdf(authenticated_api):
         )
 
     assert response.status_code == 503
-    assert response.json()["error"]["code"] == "indexing_failed"
+    assert response.json()["error"]["code"] == "service_unavailable"
     assert list(authenticated_api["upload_dir"].iterdir()) == []
 
 
-def test_upload_keeps_source_pdf_for_version_lifecycle(authenticated_api):
-    with patch(
-        "api.index_uploaded_pdf",
-        return_value={"status": "already_indexed", "chunks": 1},
-    ):
+def test_queued_upload_keeps_source_pdf_for_worker(authenticated_api):
+    with patch("api.index_uploaded_pdf") as index_uploaded_pdf:
         response = authenticated_api["client"].post(
             "/documents/upload",
             headers=authenticated_api["headers"],
             files={"file": ("mars.pdf", valid_pdf_bytes(), "application/pdf")},
         )
 
-    assert response.status_code == 201
-    assert response.json()["index_status"] == "already_indexed"
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
+    index_uploaded_pdf.assert_not_called()
     assert len(list(authenticated_api["upload_dir"].iterdir())) == 1
 
 

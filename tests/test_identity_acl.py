@@ -105,6 +105,7 @@ def test_initial_migration_creates_empty_identity_and_acl_schema(tmp_path: Path)
         "document_versions",
         "document_permissions",
         "chunks",
+        "ingestion_jobs",
         "alembic_version",
     }.issubset(inspect(database.engine).get_table_names())
     version_columns = {

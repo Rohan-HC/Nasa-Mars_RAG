@@ -97,18 +97,13 @@ def test_upload_indexes_valid_pdf_without_real_embeddings(authenticated_api):
     content = document.tobytes()
     document.close()
 
-    with (
-        patch(
-            "api.index_uploaded_pdf",
-            return_value={"status": "indexed", "chunks": 1},
-        ),
-    ):
+    with patch("api.index_uploaded_pdf") as index_uploaded_pdf:
         response = authenticated_api["client"].post(
             "/documents/upload",
             headers=authenticated_api["headers"],
             files={"file": ("mars.pdf", content, "application/pdf")},
         )
 
-    assert response.status_code == 201
-    assert response.json()["index_status"] == "indexed"
-    assert response.json()["chunks"] == 1
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
+    index_uploaded_pdf.assert_not_called()

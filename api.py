@@ -29,16 +29,16 @@ from nasa_rag.config import Settings
 from nasa_rag.db import Database
 from nasa_rag.models import User
 from nasa_rag.indexing import (
-    ConcurrentReplacementError,
     IndexingService,
     PdfChunkExtractor,
 )
+from nasa_rag.jobs import JobQueue
 from nasa_rag.rate_limit import SlidingWindowRateLimiter
 from nasa_rag.retrieval import ChromaDenseIndex
 from nasa_rag.security import InvalidTokenError, TokenService
 from rag_nasa import answer_question
 from retrieval_embeddings import NomicRetrievalEmbeddings
-from service_errors import IndexingFailedError, ServiceError, UploadStorageError
+from service_errors import ServiceError, UploadStorageError
 
 
 configure_logging()
@@ -185,6 +185,7 @@ def create_app(
     login_limiter: SlidingWindowRateLimiter | None = None,
     user_limiter: SlidingWindowRateLimiter | None = None,
     indexing_service: IndexingService | None = None,
+    job_queue: JobQueue | None = None,
 ) -> FastAPI:
     settings = Settings.from_env()
     application = FastAPI(title="NASA Mars RAG API", version="0.3.0")
@@ -208,6 +209,7 @@ def create_app(
         window_seconds=60,
     )
     application.state.indexing_service = indexing_service
+    application.state.job_queue = job_queue or JobQueue(application.state.database)
     application.state.chroma_path = settings.chroma_path
 
     def get_indexing_service(request: Request) -> IndexingService:
@@ -220,6 +222,7 @@ def create_app(
                     request.app.state.chroma_path,
                     NomicRetrievalEmbeddings(),
                 ),
+                storage_root=request.app.state.upload_dir,
             )
             request.app.state.indexing_service = service
         return service
@@ -438,6 +441,30 @@ def create_app(
             ),
         }
 
+    @application.get("/jobs/{job_id}")
+    def get_job(
+        job_id: UUID,
+        request: Request,
+        current_user: Annotated[User, Depends(get_current_user)],
+    ):
+        job = request.app.state.job_queue.get_for_owner(
+            str(job_id), current_user.id
+        )
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return {
+            "job_id": job.id,
+            "document_id": job.document_id,
+            "version_id": job.version_id,
+            "kind": job.kind,
+            "status": job.status,
+            "attempt_count": job.attempt_count,
+            "error_class": job.error_class,
+            "chunks": job.result_chunks,
+            "created_at": job.created_at,
+            "updated_at": job.updated_at,
+        }
+
     @application.put("/documents/{document_id}/permissions/{username}")
     def grant_permission(
         document_id: UUID,
@@ -569,7 +596,7 @@ def create_app(
             allowed_version_ids=versions,
         )
 
-    @application.post("/documents/upload", status_code=201)
+    @application.post("/documents/upload", status_code=202)
     def upload_document(
         request: Request,
         current_user: Annotated[User, Depends(get_current_user)],
@@ -589,23 +616,30 @@ def create_app(
                 storage_path=destination,
                 content_sha256=file_hash,
             )
-            index_result = service.process(plan.version_id)
+            job = request.app.state.job_queue.enqueue(
+                owner_id=current_user.id,
+                document_id=plan.document_id,
+                version_id=plan.version_id,
+                upload_path=str(destination),
+                kind="new_document",
+            )
         except ValueError as error:
             destination.unlink(missing_ok=True)
             raise HTTPException(status_code=422, detail=str(error)) from error
         except Exception as error:
             destination.unlink(missing_ok=True)
-            logger.error("indexing_failed", extra={"error_type": type(error).__name__})
-            raise IndexingFailedError() from error
+            logger.error("job_enqueue_failed", extra={"error_type": type(error).__name__})
+            raise HTTPException(
+                status_code=503, detail="Ingestion could not be queued"
+            ) from error
         return {
-            "document_id": index_result.document_id,
-            "version_id": index_result.version_id,
+            "job_id": job.id,
+            "document_id": plan.document_id,
+            "version_id": plan.version_id,
             "filename": original_name,
-            "sha256": file_hash,
             "pages": page_count,
             "size_bytes": total_bytes,
-            "index_status": index_result.status,
-            "chunks": index_result.chunks,
+            "status": job.status,
         }
 
     @application.put("/documents/{document_id}/content")
@@ -627,32 +661,40 @@ def create_app(
                 document_id=str(document_id),
                 storage_path=destination,
                 content_sha256=file_hash,
+                check_integrity=False,
             )
-            result = service.process(plan.version_id)
+            job = request.app.state.job_queue.enqueue(
+                owner_id=current_user.id,
+                document_id=plan.document_id,
+                version_id=plan.version_id,
+                upload_path=str(destination),
+                kind="replacement",
+            )
         except DocumentAccessError as error:
             destination.unlink(missing_ok=True)
             raise HTTPException(status_code=404, detail="Document not found") from error
-        except ConcurrentReplacementError as error:
-            destination.unlink(missing_ok=True)
-            raise HTTPException(status_code=409, detail=str(error)) from error
         except ValueError as error:
             destination.unlink(missing_ok=True)
             raise HTTPException(status_code=422, detail=str(error)) from error
         except Exception as error:
             destination.unlink(missing_ok=True)
-            logger.error("indexing_failed", extra={"error_type": type(error).__name__})
-            raise IndexingFailedError() from error
-        if plan.action == "skip":
+            logger.error("job_enqueue_failed", extra={"error_type": type(error).__name__})
+            raise HTTPException(
+                status_code=503, detail="Ingestion could not be queued"
+            ) from error
+        if Path(job.upload_path) != destination:
             destination.unlink(missing_ok=True)
-        return {
-            "document_id": result.document_id,
-            "version_id": result.version_id,
-            "sha256": file_hash,
+        return JSONResponse(
+            status_code=202,
+            content={
+            "job_id": job.id,
+            "document_id": plan.document_id,
+            "version_id": plan.version_id,
             "pages": page_count,
             "size_bytes": total_bytes,
-            "index_status": result.status,
-            "chunks": result.chunks,
-        }
+            "status": job.status,
+            },
+        )
 
     @application.delete("/documents/{document_id}", status_code=204)
     def delete_document(
@@ -660,6 +702,18 @@ def create_app(
         request: Request,
         current_user: Annotated[User, Depends(get_current_user)],
     ):
+        with request.app.state.database.session() as session:
+            try:
+                CatalogRepository(session).require_document(
+                    current_user.id, str(document_id), owner=True
+                )
+            except DocumentAccessError as error:
+                raise HTTPException(
+                    status_code=404, detail="Document not found"
+                ) from error
+        request.app.state.job_queue.cancel_document(
+            str(document_id), current_user.id
+        )
         try:
             cleanup_complete = get_indexing_service(request).delete_document(
                 current_user.id,
