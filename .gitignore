@@ -25,3 +25,7 @@ data/chroma/
 .DS_Store
 Thumbs.db
 /data/
+
+# Local evaluation outputs (fixtures and historical V1 results remain tracked)
+evaluation/results/v2_local_*.json
+evaluation/results/v2_local_*.md
