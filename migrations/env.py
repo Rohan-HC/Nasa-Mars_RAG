@@ -7,7 +7,6 @@ from sqlalchemy import engine_from_config, pool
 
 from nasa_rag.models import Base
 
-
 config = context.config
 config.set_main_option(
     "sqlalchemy.url",

@@ -3,7 +3,6 @@ import logging
 import sys
 from datetime import UTC, datetime
 
-
 LOG_FIELDS = (
     "request_id",
     "method",
@@ -15,6 +14,20 @@ LOG_FIELDS = (
     "error_code",
     "error_type",
     "error_location",
+    "job_id",
+    "worker_id",
+    "stage",
+    "attempt_count",
+    "failure_category",
+    "retrieval_mode",
+    "dense_ms",
+    "keyword_ms",
+    "fusion_ms",
+    "candidate_count",
+    "result_count",
+    "skip_count",
+    "reindex_count",
+    "chunk_count",
 )
 
 

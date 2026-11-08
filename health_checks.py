@@ -1,10 +1,14 @@
+import os
 from pathlib import Path
 
 import chromadb
 import requests
+from sqlalchemy import inspect, text
 
-
-OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
+OLLAMA_TAGS_URL = (
+    os.getenv("NASA_RAG_OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+    + "/api/tags"
+)
 REQUIRED_MODELS = {"nomic-embed-text", "qwen3:1.7b"}
 COLLECTION = "nasa_mars_uploads"
 
@@ -19,7 +23,12 @@ def _check_vector_store(vector_store_path: Path) -> dict:
         if not sample.get("ids"):
             return {"status": "empty"}
         metadata = (sample.get("metadatas") or [None])[0] or {}
-        required_metadata = {"sha256", "filename", "section"}
+        required_metadata = {
+            "document_id",
+            "version_id",
+            "filename",
+            "section",
+        }
         if not required_metadata.issubset(metadata):
             return {"status": "invalid_metadata"}
         return {"status": "ok", "chunks": collection.count()}
@@ -27,11 +36,45 @@ def _check_vector_store(vector_store_path: Path) -> dict:
         return {"status": "unavailable", "error_type": type(error).__name__}
 
 
+def _check_catalog(engine) -> dict:
+    try:
+        required_tables = {
+            "users",
+            "documents",
+            "document_versions",
+            "document_permissions",
+            "chunks",
+            "ingestion_jobs",
+        }
+        if not required_tables.issubset(inspect(engine).get_table_names()):
+            return {"status": "migration_required"}
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+            if engine.dialect.name == "sqlite":
+                fts = connection.execute(
+                    text(
+                        "SELECT 1 FROM sqlite_master "
+                        "WHERE type = 'table' AND name = 'chunk_fts'"
+                    )
+                ).first()
+                if fts is None:
+                    return {"status": "migration_required"}
+        return {"status": "ok"}
+    except Exception as error:
+        return {"status": "unavailable", "error_type": type(error).__name__}
+
+
 def check_readiness(
     *,
     vector_store_path: Path = Path("data/chroma"),
+    database_engine=None,
 ) -> dict:
     checks = {
+        "catalog": (
+            _check_catalog(database_engine)
+            if database_engine is not None
+            else {"status": "unknown"}
+        ),
         "vector_store": _check_vector_store(vector_store_path),
         "ollama": {"status": "unknown"},
         "models": {"status": "unknown"},

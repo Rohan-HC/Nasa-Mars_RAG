@@ -1,464 +1,56 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-
-    <title>NASA Mars Research Assistant</title>
-
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 850px;
-            margin: 50px auto;
-            padding: 20px;
-            background: #f5f6fa;
-        }
-
-        main {
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-        }
-
-        select {
-            display: block;
-            width: 100%;
-            padding: 12px;
-            margin: 12px 0;
-        }
-
-        textarea {
-            display: block;
-            width: 100%;
-            box-sizing: border-box;
-            padding: 12px;
-            margin: 12px 0;
-            font: inherit;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-        }
-
-        button {
-            padding: 12px 20px;
-            background: #283b53;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        #results {
-            margin-top: 25px;
-            padding: 20px;
-            background: #f8f9fb;
-            border-radius: 8px;
-        }
-
-        #comparison-answer {
-            white-space: pre-wrap;
-            line-height: 1.7;
-            overflow-wrap: anywhere;
-        }
-
-        #comparison-sources li {
-            margin-bottom: 12px;
-            overflow-wrap: anywhere;
-        }
-
-        #ask-results {
-            margin-top: 25px;
-            padding: 20px;
-            background: #f8f9fb;
-            border-radius: 8px;
-        }
-
-        #ask-answer {
-            white-space: pre-wrap;
-            line-height: 1.7;
-            overflow-wrap: anywhere;
-        }
-
-        #ask-sources li {
-            margin-bottom: 10px;
-        }
-
-        input[type="file"] {
-            display: block;
-            margin: 15px 0;
-            padding: 10px;
-            width: 100%;
-            box-sizing: border-box;
-        }
-
-        section {
-            margin-bottom: 30px;
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NASA Mars Document Intelligence</title>
+  <link rel="stylesheet" href="/static/styles.css">
 </head>
-
 <body>
-    <main>
-        <h1>NASA Mars Research Assistant</h1>
-        <p>Explore and compare scientific research papers.</p>
-
-
-
-        <section>
-            <h2>Upload Research Paper</h2>
-
-            <p>
-                Upload a PDF to add it to the research knowledge base.
-                Maximum size: 10 MB.
-            </p>
-
-            <label for="pdf-upload">Choose a PDF</label>
-
-            <input type="file" id="pdf-upload" accept=".pdf,application/pdf">
-
-            <button id="upload-button" type="button">
-                Upload and Index PDF
-            </button>
-
-            <p id="upload-status" role="status" aria-live="polite"></p>
-        </section>
-
-        <section>
-            <h2>Ask a Research Question</h2>
-
-            <label for="ask-question">Your question</label>
-            <textarea id="ask-question" rows="3"
-                placeholder="What minerals formed through aqueous alteration?"></textarea>
-
-            <button id="ask-button" type="button">
-                Ask NASA Research Assistant
-            </button>
-
-            <p id="ask-status" role="status" aria-live="polite"></p>
-
-            <div id="ask-results" hidden>
-                <h3>Answer</h3>
-                <div id="ask-answer"></div>
-
-                <h3>Supporting Sources</h3>
-                <ul id="ask-sources"></ul>
-            </div>
-        </section>
-
-        <h2>Compare Documents</h2>
-
-        <label for="document-a">Document A</label>
-        <select id="document-a"></select>
-
-        <label for="document-b">Document B</label>
-        <select id="document-b"></select>
-
-        <p id="status">Loading documents...</p>
-
-        <h2>Research Question</h2>
-
-        <label for="comparison-question">What would you like to compare?</label>
-
-        <textarea id="comparison-question" rows="3">
-Compare the geological findings of these two documents.
-</textarea>
-
-        <button id="compare-button" type="button">
-            Compare Documents
-        </button>
-
-        <p id="compare-status" role="status" aria-live="polite"></p>
-
-        <section id="results" hidden>
-            <h2>AI-Generated Comparison</h2>
-            <div id="comparison-answer"></div>
-
-            <h3>Retrieved Sources</h3>
-            <ul id="comparison-sources"></ul>
-
-            <p id="validation-status"></p>
-        </section>
-
-    </main>
-
-    <script>
-        async function loadDocuments() {
-            const status = document.getElementById("status");
-            const selectA = document.getElementById("document-a");
-            const selectB = document.getElementById("document-b");
-
-            try {
-                const response = await fetch("/documents");
-
-                if (!response.ok) {
-                    throw new Error("Failed to retrieve documents");
-                }
-
-                const data = await response.json();
-                selectA.replaceChildren();
-                selectB.replaceChildren();
-                for (const doc of data.documents) {
-                    for (const select of [selectA, selectB]) {
-                        const option = document.createElement("option");
-                        option.value = doc.sha256;
-                        option.textContent = doc.filename;
-                        select.appendChild(option);
-                    }
-                }
-
-                if (data.documents.length > 1) {
-                    selectB.selectedIndex = 1;
-                }
-
-                status.textContent =
-                    `${data.count} documents available`;
-
-            } catch (error) {
-                status.textContent = error.message;
-            }
-        }
-
-        async function compareDocuments() {
-            const documentA = document.getElementById("document-a").value;
-            const documentB = document.getElementById("document-b").value;
-            const question = document.getElementById(
-                "comparison-question"
-            ).value.trim();
-
-            const button = document.getElementById("compare-button");
-            const status = document.getElementById("compare-status");
-            const results = document.getElementById("results");
-            const answer = document.getElementById("comparison-answer");
-            const sources = document.getElementById("comparison-sources");
-            const validation = document.getElementById("validation-status");
-
-            results.hidden = true;
-
-            if (!documentA || !documentB) {
-                status.textContent = "Please select two documents.";
-                return;
-            }
-
-            if (documentA === documentB) {
-                status.textContent = "Please select two different documents.";
-                return;
-            }
-
-            if (!question) {
-                status.textContent = "Please enter a question.";
-                return;
-            }
-
-            button.disabled = true;
-            status.textContent = "Generating comparison...";
-
-            try {
-                const response = await fetch("/compare/documents", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        document_a: documentA,
-                        document_b: documentB,
-                        question: question
-                    })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(
-                        typeof data.error?.message === "string"
-                            ? data.error.message
-                            : typeof data.detail === "string"
-                            ? data.detail
-                            : `Request failed (${response.status})`
-                    );
-                }
-
-                answer.textContent = data.answer || "No answer returned.";
-
-                sources.replaceChildren();
-
-                for (const source of data.retrieved || []) {
-                    const item = document.createElement("li");
-
-                    item.textContent =
-                        `[${source.label}] ${source.filename} ` +
-                        `(Page ${source.page})`;
-
-                    sources.appendChild(item);
-                }
-
-                if (data.validation) {
-                    validation.textContent = data.validation.passed
-                        ? "Citation and source-coverage checks passed."
-                        : "Validation issues: " +
-                        data.validation.errors.join("; ");
-                } else {
-                    validation.textContent = "Validation status unavailable.";
-                }
-
-                results.hidden = false;
-                status.textContent = data.validation?.passed
-                    ? "Comparison generated. Citation checks passed; factual accuracy is not verified."
-                    : "Warning: The AI response failed validation. Do not rely on this answer.";
-
-            } catch (error) {
-                status.textContent = `Error: ${error.message}`;
-            } finally {
-                button.disabled = false;
-            }
-        }
-
-        document.getElementById("compare-button")
-            .addEventListener("click", compareDocuments);
-
-        async function askQuestion() {
-            const question = document.getElementById(
-                "ask-question"
-            ).value.trim();
-
-            const button = document.getElementById("ask-button");
-            const status = document.getElementById("ask-status");
-            const results = document.getElementById("ask-results");
-            const answer = document.getElementById("ask-answer");
-            const sources = document.getElementById("ask-sources");
-
-            results.hidden = true;
-
-            if (!question) {
-                status.textContent = "Please enter a question.";
-                return;
-            }
-
-            button.disabled = true;
-            status.textContent = "Searching NASA research documents...";
-
-            try {
-                const response = await fetch("/ask", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ question })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(
-                        typeof data.error?.message === "string"
-                            ? data.error.message
-                            : typeof data.detail === "string"
-                            ? data.detail
-                            : `Request failed (${response.status})`
-                    );
-                }
-
-                answer.textContent = data.answer || "No answer available.";
-
-                sources.replaceChildren();
-
-                for (const source of data.retrieved || []) {
-                    const item = document.createElement("li");
-
-                    item.textContent =
-                        `[${source.label}] ${source.title} ` +
-                        `(Page ${source.page})`;
-
-                    sources.appendChild(item);
-                }
-
-                results.hidden = false;
-                status.textContent = "Answer generated. Verify claims against the sources.";
-
-            } catch (error) {
-                status.textContent = `Error: ${error.message}`;
-            } finally {
-                button.disabled = false;
-            }
-        }
-
-        document.getElementById("ask-button")
-            .addEventListener("click", askQuestion);
-
-        async function uploadPDF() {
-            const fileInput = document.getElementById("pdf-upload");
-            const button = document.getElementById("upload-button");
-            const status = document.getElementById("upload-status");
-
-            const file = fileInput.files[0];
-
-            if (!file) {
-                status.textContent = "Please select a PDF file.";
-                return;
-            }
-
-            if (!file.name.toLowerCase().endsWith(".pdf")) {
-                status.textContent = "Only PDF files are supported.";
-                return;
-            }
-
-            if (file.size > 10 * 1024 * 1024) {
-                status.textContent = "PDF must be 10 MB or smaller.";
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append("file", file);
-
-            button.disabled = true;
-            status.textContent = "Uploading and indexing PDF...";
-
-            try {
-                const response = await fetch("/documents/upload", {
-                    method: "POST",
-                    body: formData
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(
-                        typeof data.error?.message === "string"
-                            ? data.error.message
-                            : typeof data.detail === "string"
-                            ? data.detail
-                            : `Upload failed (${response.status})`
-                    );
-                }
-
-                status.textContent =
-                    `Upload successful: ${data.filename}. ` +
-                    `Index status: ${data.index_status}. ` +
-                    `Pages: ${data.pages}. ` +
-                    `Chunks: ${data.chunks}.`;
-
-                fileInput.value = "";
-
-                // Refresh the document dropdowns
-                await loadDocuments();
-
-            } catch (error) {
-                status.textContent = `Error: ${error.message}`;
-            } finally {
-                button.disabled = false;
-            }
-        }
-
-        document.getElementById("upload-button")
-            .addEventListener("click", uploadPDF);
-
-        loadDocuments();
-    </script>
+  <main>
+    <header>
+      <div><p class="eyebrow">Local document intelligence</p><h1>NASA Mars Research Assistant</h1></div>
+      <div id="session-controls" hidden><span id="current-user"></span><button id="logout-button" class="secondary" type="button">Log out</button></div>
+    </header>
+
+    <section id="login-panel" class="panel narrow">
+      <h2>Sign in</h2>
+      <form id="login-form">
+        <label for="username">Username</label><input id="username" autocomplete="username" required>
+        <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Sign in</button>
+      </form>
+      <p id="login-status" class="status" role="status"></p>
+    </section>
+
+    <div id="application" hidden>
+      <section class="panel">
+        <div class="section-heading"><div><p class="eyebrow">Ingestion</p><h2>Documents</h2></div><button id="refresh-button" class="secondary" type="button">Refresh</button></div>
+        <p>PDF files are private to their owner unless explicitly shared. Maximum size: 10 MB.</p>
+        <div class="grid two">
+          <div><label for="pdf-upload">New PDF</label><input type="file" id="pdf-upload" accept=".pdf,application/pdf"><button id="upload-button" type="button">Upload</button></div>
+          <div><label for="replace-document">Replace logical document</label><select id="replace-document"></select><input type="file" id="replacement-upload" accept=".pdf,application/pdf"><button id="replace-button" type="button">Queue replacement</button></div>
+        </div>
+        <p id="upload-status" class="status" role="status" aria-live="polite"></p>
+        <ul id="document-list" class="document-list"></ul>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading"><div><p class="eyebrow">Retrieval</p><h2>Ask</h2></div><div><label for="retrieval-mode">Mode</label><select id="retrieval-mode"><option value="hybrid">Hybrid</option><option value="dense">Dense</option><option value="keyword">BM25 keyword</option></select></div></div>
+        <label for="ask-question">Question</label><textarea id="ask-question" rows="3" maxlength="1000" placeholder="Which minerals formed through aqueous alteration?"></textarea>
+        <button id="ask-button" type="button">Ask</button><p id="ask-status" class="status" role="status"></p>
+        <article id="ask-results" class="result" hidden><h3>Answer</h3><div id="ask-answer" class="answer"></div><h3>Authorized sources</h3><ul id="ask-sources"></ul></article>
+      </section>
+
+      <section class="panel">
+        <p class="eyebrow">Synthesis</p><h2>Compare two ready documents</h2>
+        <div class="grid two"><div><label for="document-a">Document A</label><select id="document-a"></select></div><div><label for="document-b">Document B</label><select id="document-b"></select></div></div>
+        <label for="comparison-question">Comparison question</label><textarea id="comparison-question" rows="3" maxlength="1000">Compare the geological findings of these two documents.</textarea>
+        <button id="compare-button" type="button">Compare</button><p id="compare-status" class="status" role="status"></p>
+        <article id="comparison-results" class="result" hidden><h3>Comparison</h3><div id="comparison-answer" class="answer"></div><h3>Authorized sources</h3><ul id="comparison-sources"></ul><p id="validation-status"></p></article>
+      </section>
+    </div>
+  </main>
+  <script src="/static/app.js" defer></script>
 </body>
-
 </html>

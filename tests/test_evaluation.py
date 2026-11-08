@@ -7,7 +7,6 @@ from evaluation.report import build_report
 from evaluation.run import run_evaluation
 from evaluation.verify_sources import verify_case_sources
 
-
 DATASET = Path("evaluation/datasets/mars_eval_v1.json")
 
 

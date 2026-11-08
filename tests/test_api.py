@@ -1,11 +1,10 @@
 from unittest.mock import patch
+from uuid import uuid4
 
 import pymupdf
 from fastapi.testclient import TestClient
-from uuid import uuid4
 
 import api
-
 
 HASH_A = "a" * 64
 HASH_B = "b" * 64
@@ -97,7 +96,9 @@ def test_upload_indexes_valid_pdf_without_real_embeddings(authenticated_api):
     content = document.tobytes()
     document.close()
 
-    with patch("api.index_uploaded_pdf") as index_uploaded_pdf:
+    with patch.object(
+        authenticated_api["app"].state.indexing_service, "process", create=True
+    ) as process:
         response = authenticated_api["client"].post(
             "/documents/upload",
             headers=authenticated_api["headers"],
@@ -106,4 +107,4 @@ def test_upload_indexes_valid_pdf_without_real_embeddings(authenticated_api):
 
     assert response.status_code == 202
     assert response.json()["status"] == "queued"
-    index_uploaded_pdf.assert_not_called()
+    process.assert_not_called()

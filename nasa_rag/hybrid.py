@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import logging
 import re
 from collections import defaultdict
+from time import perf_counter
 
 from langchain_core.documents import Document as LangChainDocument
 from sqlalchemy import bindparam, text
@@ -10,8 +12,8 @@ from nasa_rag.catalog import CatalogRepository
 from nasa_rag.db import Database
 from nasa_rag.retrieval import RetrievedChunk
 
-
 RETRIEVAL_MODES = {"dense", "keyword", "hybrid"}
+logger = logging.getLogger(__name__)
 
 
 class LexicalIndex:
@@ -34,7 +36,6 @@ class LexicalIndex:
         if not tokens:
             return []
         match_query = " OR ".join(f'"{token.replace(chr(34), chr(34) * 2)}"' for token in tokens)
-        filename_filter = ""
         parameters = {
             "query": match_query,
             "versions": sorted(set(allowed_version_ids)),
@@ -162,11 +163,14 @@ class HybridRetriever:
         if not allowed_versions:
             return []
         candidate_k = max(k, k * self.candidate_multiplier)
+        dense_started = perf_counter()
         dense = (
             self.dense_index.search(question, allowed_versions, candidate_k)
             if mode in {"dense", "hybrid"}
             else []
         )
+        dense_ms = (perf_counter() - dense_started) * 1000
+        keyword_started = perf_counter()
         keyword = (
             self.lexical_index.search(
                 question,
@@ -177,6 +181,8 @@ class HybridRetriever:
             if mode in {"keyword", "hybrid"}
             else []
         )
+        keyword_ms = (perf_counter() - keyword_started) * 1000
+        fusion_started = perf_counter()
         if mode == "dense":
             ranked_ids = [item.chunk_id for item in dense]
             fused_scores = {chunk_id: 1 / (rank + 1) for rank, chunk_id in enumerate(ranked_ids)}
@@ -222,6 +228,17 @@ class HybridRetriever:
             )
             if len(results) == k:
                 break
+        logger.info(
+            "retrieval_complete",
+            extra={
+                "retrieval_mode": mode,
+                "dense_ms": round(dense_ms, 2),
+                "keyword_ms": round(keyword_ms, 2),
+                "fusion_ms": round((perf_counter() - fusion_started) * 1000, 2),
+                "candidate_count": len(ranked_ids),
+                "result_count": len(results),
+            },
+        )
         return results
 
     @staticmethod

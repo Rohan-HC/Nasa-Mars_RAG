@@ -1,7 +1,9 @@
 import logging
+import os
 from time import perf_counter
 
 from langchain_ollama import ChatOllama
+
 from citation_validation import validate_citations
 from rag_runtime import invoke_model, retrieve
 from search_nasa import search_nasa
@@ -11,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 llm = ChatOllama(
     model="qwen3:1.7b",
-    base_url="http://localhost:11434",
+    base_url=os.getenv("NASA_RAG_OLLAMA_BASE_URL", "http://localhost:11434"),
     reasoning=False,
     temperature=0,
     client_kwargs={"timeout": 120.0},
@@ -82,7 +84,7 @@ def answer_question(
     # Step 2: Construct evidence context
     context_parts = []
 
-    for index, (document, distance) in enumerate(results, start=1):
+    for index, (document, _distance) in enumerate(results, start=1):
         title = (
             document.metadata.get("title")
             or document.metadata.get("filename")

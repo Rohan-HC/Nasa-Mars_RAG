@@ -155,7 +155,7 @@ def test_two_workers_cannot_claim_same_live_job(job_system):
 
 
 def test_expired_lease_is_recovered_and_stale_worker_cannot_complete(job_system):
-    upload = job_system["client"].post(
+    job_system["client"].post(
         "/documents/upload",
         headers=job_system["headers"][job_system["alice"].id],
         files={"file": ("recover.pdf", pdf_bytes(), "application/pdf")},

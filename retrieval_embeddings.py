@@ -1,12 +1,17 @@
+import os
+
 from langchain_core.embeddings import Embeddings
 from langchain_ollama import OllamaEmbeddings
 
 
 class NomicRetrievalEmbeddings(Embeddings):
-    def __init__(self):
+    def __init__(self, base_url: str | None = None):
         self.model = OllamaEmbeddings(
             model="nomic-embed-text",
-            base_url="http://localhost:11434",
+            base_url=(
+                base_url
+                or os.getenv("NASA_RAG_OLLAMA_BASE_URL", "http://localhost:11434")
+            ),
             client_kwargs={"timeout": 30.0},
         )
 

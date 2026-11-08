@@ -1,0 +1,13 @@
+.git
+.github
+.venv*
+__pycache__
+.pytest_cache
+.ruff_cache
+.tmp
+.env*
+!.env.example
+data
+evaluation/results/v2_local_*
+*.pdf
+*.db

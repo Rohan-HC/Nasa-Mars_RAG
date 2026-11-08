@@ -1,8 +1,7 @@
 """Add durable ingestion jobs with lease and retry state."""
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "0003_ingestion_jobs"
 down_revision = "0002_canonical_chunks"

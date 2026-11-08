@@ -4,7 +4,6 @@ import math
 import re
 from statistics import mean
 
-
 REFUSAL_MARKERS = (
     "cannot answer",
     "insufficient evidence",

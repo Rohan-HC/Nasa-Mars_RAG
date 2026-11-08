@@ -14,6 +14,7 @@ import api
 import health_checks
 import rag_nasa
 from logging_config import JsonFormatter
+from nasa_rag.db import Database
 from service_errors import (
     ModelTimeoutError,
     OllamaUnavailableError,
@@ -35,6 +36,7 @@ def test_readiness_reports_unavailable_dependency_with_503():
     readiness = {
         "ready": False,
         "checks": {
+            "catalog": {"status": "ok"},
             "vector_store": {"status": "ok"},
             "ollama": {"status": "unavailable"},
             "models": {"status": "unknown"},
@@ -51,6 +53,7 @@ def test_readiness_reports_ready_when_all_dependencies_are_available():
     readiness = {
         "ready": True,
         "checks": {
+            "catalog": {"status": "ok"},
             "vector_store": {"status": "ok"},
             "ollama": {"status": "ok"},
             "models": {"status": "ok"},
@@ -108,7 +111,12 @@ def test_vector_store_readiness_requires_readable_collection_metadata(tmp_path):
     collection.get.return_value = {
         "ids": ["chunk-1"],
         "metadatas": [
-            {"sha256": "a" * 64, "filename": "mars.pdf", "section": "content"}
+            {
+                "document_id": "document-1",
+                "version_id": "version-1",
+                "filename": "mars.pdf",
+                "section": "content",
+            }
         ],
     }
     collection.count.return_value = 1
@@ -131,6 +139,17 @@ def test_vector_store_readiness_rejects_empty_collection(tmp_path):
         result = health_checks._check_vector_store(tmp_path)
 
     assert result == {"status": "empty"}
+
+
+def test_catalog_readiness_requires_schema_and_fts_index(tmp_path):
+    database = Database(f"sqlite+pysqlite:///{tmp_path / 'ready.db'}")
+    assert health_checks._check_catalog(database.engine) == {
+        "status": "migration_required"
+    }
+
+    database.create_schema()
+
+    assert health_checks._check_catalog(database.engine) == {"status": "ok"}
 
 
 def test_ask_maps_model_timeout_to_predictable_error_envelope(authenticated_api):
@@ -197,7 +216,9 @@ def test_failed_job_enqueue_removes_uploaded_pdf(authenticated_api):
 
 
 def test_queued_upload_keeps_source_pdf_for_worker(authenticated_api):
-    with patch("api.index_uploaded_pdf") as index_uploaded_pdf:
+    with patch.object(
+        authenticated_api["app"].state.indexing_service, "process", create=True
+    ) as process:
         response = authenticated_api["client"].post(
             "/documents/upload",
             headers=authenticated_api["headers"],
@@ -206,7 +227,7 @@ def test_queued_upload_keeps_source_pdf_for_worker(authenticated_api):
 
     assert response.status_code == 202
     assert response.json()["status"] == "queued"
-    index_uploaded_pdf.assert_not_called()
+    process.assert_not_called()
     assert len(list(authenticated_api["upload_dir"].iterdir())) == 1
 
 

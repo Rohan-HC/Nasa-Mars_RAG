@@ -9,13 +9,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
+from logging_config import configure_logging
 from nasa_rag.config import Settings
 from nasa_rag.db import Database
 from nasa_rag.indexing import ConcurrentReplacementError, IndexingService, PdfChunkExtractor
 from nasa_rag.jobs import JobQueue
 from nasa_rag.retrieval import ChromaDenseIndex
 from retrieval_embeddings import NomicRetrievalEmbeddings
-
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,9 @@ class IngestionWorker:
                 "ingestion_job_complete",
                 extra={
                     "job_id": job.id,
+                    "worker_id": self.worker_id,
                     "stage": "complete",
+                    "attempt_count": job.attempt_count,
                     "duration_ms": round((time.perf_counter() - started) * 1000, 2),
                 },
             )
@@ -80,7 +82,10 @@ class IngestionWorker:
                 "ingestion_job_failed",
                 extra={
                     "job_id": job.id,
+                    "worker_id": self.worker_id,
                     "stage": "index",
+                    "attempt_count": job.attempt_count,
+                    "failure_category": type(error).__name__,
                     "error_type": type(error).__name__,
                 },
             )
@@ -144,7 +149,10 @@ def build_worker() -> IngestionWorker:
     indexing = IndexingService(
         database,
         PdfChunkExtractor(),
-        ChromaDenseIndex(settings.chroma_path, NomicRetrievalEmbeddings()),
+        ChromaDenseIndex(
+            settings.chroma_path,
+            NomicRetrievalEmbeddings(settings.ollama_base_url),
+        ),
         storage_root=settings.upload_dir,
     )
     worker_id = os.getenv(
@@ -155,6 +163,7 @@ def build_worker() -> IngestionWorker:
 
 
 def main() -> None:
+    configure_logging()
     build_worker().run_forever()
 
 

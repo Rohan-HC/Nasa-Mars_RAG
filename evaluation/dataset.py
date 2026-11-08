@@ -5,7 +5,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-
 VALID_CATEGORIES = {
     "factual_retrieval",
     "multi_evidence",

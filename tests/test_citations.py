@@ -1,7 +1,6 @@
 from comparison_checks import validate_comparison_response
 from eval_answers import check_citations
 
-
 SOURCES = [
     {"label": "S1", "filename": "crater-floor.pdf"},
     {"label": "S2", "filename": "delta-front.pdf"},

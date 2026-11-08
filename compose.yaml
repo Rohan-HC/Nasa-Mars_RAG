@@ -1,0 +1,39 @@
+services:
+  api:
+    build: .
+    command: ["sh", "-c", "alembic upgrade head && python -m uvicorn api:app --host 0.0.0.0 --port 8000"]
+    environment: &app-environment
+      NASA_RAG_JWT_SECRET: ${NASA_RAG_JWT_SECRET:?Set NASA_RAG_JWT_SECRET to at least 32 random bytes}
+      NASA_RAG_DATABASE_URL: sqlite+pysqlite:////app/data/catalog.db
+      NASA_RAG_CHROMA_PATH: /app/data/chroma
+      NASA_RAG_UPLOAD_DIR: /app/data/uploads
+      NASA_RAG_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      NASA_RAG_RETRIEVAL_MODE: ${NASA_RAG_RETRIEVAL_MODE:-hybrid}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - nasa_rag_data:/app/data
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  worker:
+    build: .
+    command: ["python", "-m", "nasa_rag.worker"]
+    environment: *app-environment
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - nasa_rag_data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  nasa_rag_data:

@@ -1,10 +1,10 @@
 import logging
 from time import perf_counter
 
-from search_nasa import search_nasa
-from rag_nasa import llm
 from comparison_checks import validate_comparison, validate_comparison_response
+from rag_nasa import llm
 from rag_runtime import invoke_model, retrieve
+from search_nasa import search_nasa
 
 logger = logging.getLogger(__name__)
 

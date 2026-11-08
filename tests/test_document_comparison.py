@@ -1,10 +1,9 @@
-from unittest.mock import Mock, patch
 import logging
+from unittest.mock import Mock, patch
 
 from langchain_core.documents import Document
 
 import document_comparison
-
 
 HASH_A = "a" * 64
 HASH_B = "b" * 64

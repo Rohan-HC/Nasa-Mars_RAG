@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from evaluation.faithfulness import (
     aggregate_quality,
@@ -8,11 +9,9 @@ from evaluation.faithfulness import (
     parse_answer_claims,
     retrieval_metrics,
 )
+from evaluation.semantic_judge import OllamaSemanticJudge
 from evaluation.v2_dataset import load_v2_dataset
 from evaluation.v2_run import run_v2_evaluation
-from evaluation.semantic_judge import OllamaSemanticJudge
-from unittest.mock import Mock, patch
-
 
 DATASET = Path("evaluation/datasets/document_intelligence_eval_v2.json")
 

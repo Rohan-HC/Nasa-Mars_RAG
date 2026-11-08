@@ -19,6 +19,7 @@ class Settings:
     retrieval_mode: str = "hybrid"
     retrieval_k: int = 4
     rrf_k: int = 60
+    ollama_base_url: str = "http://localhost:11434"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -60,4 +61,7 @@ class Settings:
             retrieval_mode=retrieval_mode,
             retrieval_k=retrieval_k,
             rrf_k=rrf_k,
+            ollama_base_url=os.getenv(
+                "NASA_RAG_OLLAMA_BASE_URL", "http://localhost:11434"
+            ).rstrip("/"),
         )

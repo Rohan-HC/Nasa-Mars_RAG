@@ -10,7 +10,9 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    env:
+      NASA_RAG_JWT_SECRET: tests-only-ci-secret-that-is-at-least-thirty-two-bytes
 
     steps:
       - uses: actions/checkout@v4
@@ -20,5 +22,34 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
+      - name: Validate dependency installation
+        run: python -m pip check
+      - name: Lint Python sources
+        run: >-
+          ruff check api.py nasa_rag evaluation tests logging_config.py
+          health_checks.py rag_nasa.py document_comparison.py compare_nasa.py
+          retrieval_embeddings.py migrations
+      - name: Verify database migrations
+        env:
+          NASA_RAG_DATABASE_URL: sqlite+pysqlite:///ci-migrations.db
+        run: |
+          alembic upgrade head
+          alembic current --check-heads
+          alembic downgrade base
+          alembic upgrade head
+      - name: Run API smoke test
+        run: python -m pytest -q tests/test_smoke.py
       - name: Run offline test suite
         run: python -m pytest -q
+      - name: Audit dependencies
+        # Chroma's published advisories affect its HTTP server. This project uses
+        # only embedded PersistentClient and never launches that server. Keep the
+        # exceptions explicit so any new advisory still fails CI.
+        run: >-
+          pip-audit -r requirements.txt --progress-spinner off
+          --ignore-vuln PYSEC-2026-311
+          --ignore-vuln PYSEC-2026-3813
+          --ignore-vuln PYSEC-2026-3814
+          --ignore-vuln PYSEC-2026-3815
+      - name: Inventory dependency licenses
+        run: pip-licenses --from=mixed --summary

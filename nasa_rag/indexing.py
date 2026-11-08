@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Literal, Protocol
 
 import pymupdf
@@ -14,8 +16,8 @@ from nasa_rag.db import Database
 from nasa_rag.models import Chunk
 from nasa_rag.retrieval import IndexedChunk
 
-
 INDEX_SCHEMA_VERSION = "v3"
+logger = logging.getLogger(__name__)
 
 
 class ConcurrentReplacementError(RuntimeError):
@@ -212,20 +214,41 @@ class IndexingService:
             if version.status == "active" and self._integrity_established(
                 catalog, version.id, version.chunk_count
             ):
-                return IndexingResult(
+                result = IndexingResult(
                     document.id,
                     version.id,
                     "already_indexed",
                     version.chunk_count or 0,
                     version.page_count or 0,
                 )
+                logger.info(
+                    "indexing_complete",
+                    extra={
+                        "stage": "integrity_check",
+                        "skip_count": 1,
+                        "reindex_count": 0,
+                        "chunk_count": result.chunks,
+                    },
+                )
+                return result
             storage_path = Path(version.storage_path)
             filename = version.filename
             document_id = version.document_id
             expected_active_id = version.based_on_version_id
             version_was_active = version.status == "active"
 
+        extraction_started = perf_counter()
         extracted = self.extractor.extract(storage_path)
+        logger.info(
+            "indexing_stage_complete",
+            extra={
+                "stage": "extract_chunk",
+                "duration_ms": round(
+                    (perf_counter() - extraction_started) * 1000, 2
+                ),
+                "chunk_count": len(extracted),
+            },
+        )
         chunks = self._indexed_chunks(
             document_id=document_id,
             version_id=version_id,
@@ -268,14 +291,21 @@ class IndexingService:
                     raise ConcurrentReplacementError(
                         "A newer document version is already active"
                     ) from error
-        except Exception:
+        except Exception as error:
             self._discard_failed_version(version_id, version_was_active)
+            logger.warning(
+                "indexing_failed",
+                extra={
+                    "stage": "stage_verify_promote",
+                    "failure_category": type(error).__name__,
+                },
+            )
             raise
 
         cleanup_complete = True
         if previous_id and previous_id != version_id:
             cleanup_complete = self._cleanup_version(previous_id)
-        return IndexingResult(
+        result = IndexingResult(
             document_id,
             version_id,
             "indexed",
@@ -283,6 +313,16 @@ class IndexingService:
             len({chunk.page for chunk in chunks}),
             cleanup_complete,
         )
+        logger.info(
+            "indexing_complete",
+            extra={
+                "stage": "promote",
+                "skip_count": 0,
+                "reindex_count": 1,
+                "chunk_count": result.chunks,
+            },
+        )
+        return result
 
     def delete_document(self, owner_id: str, document_id: str) -> bool:
         with self.database.session() as session:

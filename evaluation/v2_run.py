@@ -15,9 +15,8 @@ from evaluation.faithfulness import (
     judge_agreement,
     retrieval_metrics,
 )
-from evaluation.v2_dataset import load_v2_dataset
 from evaluation.semantic_judge import OllamaSemanticJudge
-
+from evaluation.v2_dataset import load_v2_dataset
 
 DEFAULT_DATASET = Path("evaluation/datasets/document_intelligence_eval_v2.json")
 

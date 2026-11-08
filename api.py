@@ -15,32 +15,31 @@ from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from compare_nasa import compare_campaigns
 from document_comparison import compare_documents
-from document_indexer import index_uploaded_pdf
 from health_checks import check_readiness
 from logging_config import configure_logging
 from nasa_rag.auth import AuthenticationError, authenticate_user
 from nasa_rag.catalog import CatalogRepository, DocumentAccessError
 from nasa_rag.config import Settings
 from nasa_rag.db import Database
-from nasa_rag.models import User
+from nasa_rag.hybrid import HybridRetriever, LexicalIndex
 from nasa_rag.indexing import (
     IndexingService,
     PdfChunkExtractor,
 )
 from nasa_rag.jobs import JobQueue
-from nasa_rag.hybrid import HybridRetriever, LexicalIndex
+from nasa_rag.models import User
 from nasa_rag.rate_limit import SlidingWindowRateLimiter
 from nasa_rag.retrieval import ChromaDenseIndex
 from nasa_rag.security import InvalidTokenError, TokenService
 from rag_nasa import answer_question
 from retrieval_embeddings import NomicRetrievalEmbeddings
 from service_errors import ServiceError, UploadStorageError
-
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -85,7 +84,7 @@ def store_validated_pdf(
         destination.unlink(missing_ok=True)
         raise HTTPException(
             status_code=422, detail="Uploaded file is not a readable PDF"
-        )
+        ) from None
     except OSError as error:
         destination.unlink(missing_ok=True)
         raise UploadStorageError() from error
@@ -194,6 +193,11 @@ def create_app(
 ) -> FastAPI:
     settings = Settings.from_env()
     application = FastAPI(title="NASA Mars RAG API", version="0.3.0")
+    application.mount(
+        "/static",
+        StaticFiles(directory=Path(__file__).resolve().parent / "web"),
+        name="static",
+    )
     application.state.database = database or Database(settings.database_url)
     application.state.token_service = token_service or TokenService(
         settings.jwt_secret,
@@ -218,6 +222,7 @@ def create_app(
     application.state.retrieval_mode = settings.retrieval_mode
     application.state.retrieval_k = settings.retrieval_k
     application.state.rrf_k = settings.rrf_k
+    application.state.ollama_base_url = settings.ollama_base_url
 
     def get_indexing_service(request: Request) -> IndexingService:
         service = request.app.state.indexing_service
@@ -227,7 +232,7 @@ def create_app(
                 PdfChunkExtractor(),
                 ChromaDenseIndex(
                     request.app.state.chroma_path,
-                    NomicRetrievalEmbeddings(),
+                    NomicRetrievalEmbeddings(request.app.state.ollama_base_url),
                 ),
                 storage_root=request.app.state.upload_dir,
             )
@@ -241,7 +246,7 @@ def create_app(
                 request.app.state.database,
                 ChromaDenseIndex(
                     request.app.state.chroma_path,
-                    NomicRetrievalEmbeddings(),
+                    NomicRetrievalEmbeddings(request.app.state.ollama_base_url),
                 ),
                 LexicalIndex(request.app.state.database),
                 rrf_k=request.app.state.rrf_k,
@@ -380,7 +385,10 @@ def create_app(
 
     @application.get("/health/ready")
     def readiness():
-        result = check_readiness()
+        result = check_readiness(
+            vector_store_path=application.state.chroma_path,
+            database_engine=application.state.database.engine,
+        )
         status = "ready" if result["ready"] else "not_ready"
         return JSONResponse(
             status_code=200 if result["ready"] else 503,
@@ -640,10 +648,12 @@ def create_app(
 
     @application.post("/compare/campaigns")
     def compare_nasa_campaigns(
+        request: Request,
         body: CompareRequest,
         current_user: Annotated[User, Depends(get_current_user)],
         session: Annotated[Session, Depends(get_session)],
     ):
+        enforce_user_limit(request, current_user)
         mode = body.retrieval_mode or request.app.state.retrieval_mode
         retrieval_service = get_retrieval_service(request)
 

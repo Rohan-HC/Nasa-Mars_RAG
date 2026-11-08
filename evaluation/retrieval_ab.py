@@ -33,8 +33,8 @@ def compare_retrieval_modes(cases, retrieve, *, modes, k: int) -> dict:
             )
         ordered = sorted(latencies)
 
-        def percentile(fraction):
-            return ordered[max(0, math.ceil(fraction * len(ordered)) - 1)]
+        def percentile(fraction, values=ordered):
+            return values[max(0, math.ceil(fraction * len(values)) - 1)]
 
         output["modes"][mode] = {
             "recall_at_k": mean(recalls) if recalls else None,

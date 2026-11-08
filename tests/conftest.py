@@ -5,7 +5,6 @@ import pymupdf
 import pytest
 from fastapi.testclient import TestClient
 
-
 os.environ.setdefault(
     "NASA_RAG_JWT_SECRET",
     "tests-only-secret-that-is-at-least-thirty-two-bytes",
@@ -62,30 +61,6 @@ def authenticated_api(tmp_path: Path):
                     document_id=document.id,
                     version_id=version.id,
                     action="index",
-                )
-
-        def process(self, version_id):
-            with database.session() as session:
-                catalog = CatalogRepository(session)
-                version = catalog.get_version(version_id)
-                result = api.index_uploaded_pdf(
-                    pdf_path=Path(version.storage_path),
-                    file_hash=version.content_sha256,
-                    original_name=version.filename,
-                    document_id=version.document_id,
-                    version_id=version.id,
-                )
-                catalog.mark_version_indexed(
-                    version.id,
-                    page_count=1,
-                    chunk_count=result["chunks"],
-                )
-                catalog.activate_version(version.document_id, version.id)
-                return SimpleNamespace(
-                    document_id=version.document_id,
-                    version_id=version.id,
-                    status=result["status"],
-                    chunks=result["chunks"],
                 )
 
     app = create_app(

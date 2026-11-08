@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from nasa_rag.db import Database
 from nasa_rag.models import IngestionJob, utc_now
 
-
 ACTIVE_JOB_STATUSES = ("queued", "running", "retryable_failed")
 
 

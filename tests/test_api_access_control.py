@@ -8,9 +8,9 @@ from fastapi.testclient import TestClient
 from api import create_app
 from nasa_rag.catalog import CatalogRepository
 from nasa_rag.db import Database
-from nasa_rag.security import TokenService, hash_password
-from nasa_rag.rate_limit import SlidingWindowRateLimiter
 from nasa_rag.indexing import IndexingService
+from nasa_rag.rate_limit import SlidingWindowRateLimiter
+from nasa_rag.security import TokenService, hash_password
 
 
 @pytest.fixture
@@ -116,6 +116,20 @@ def test_login_failure_is_generic_and_does_not_enumerate_users(secure_api):
 
     assert missing.status_code == wrong.status_code == 401
     assert missing.json()["error"]["message"] == wrong.json()["error"]["message"]
+
+
+def test_campaign_comparison_obeys_authenticated_user_rate_limit(secure_api):
+    limiter = SlidingWindowRateLimiter(limit=1, window_seconds=60)
+    assert limiter.allow(secure_api["alice"].id)
+    secure_api["client"].app.state.user_limiter = limiter
+
+    response = secure_api["client"].post(
+        "/compare/campaigns",
+        headers=secure_api["alice_headers"],
+        json={"question": "Compare the campaigns"},
+    )
+
+    assert response.status_code == 429
 
 
 def test_repeated_login_attempts_are_rate_limited(tmp_path):

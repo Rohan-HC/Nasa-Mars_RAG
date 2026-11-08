@@ -131,7 +131,7 @@ class ChromaDenseIndex:
         if set(data["ids"]) != set(expected):
             return False
         for chunk_id, text, metadata in zip(
-            data["ids"], data["documents"], data["metadatas"]
+            data["ids"], data["documents"], data["metadatas"], strict=True
         ):
             chunk = expected[chunk_id]
             if (

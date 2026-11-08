@@ -6,7 +6,6 @@ from uuid import uuid4
 import jwt
 from pwdlib import PasswordHash
 
-
 _password_hash = PasswordHash.recommended()
 
 

@@ -1,359 +1,192 @@
-# NASA Mars Research Assistant
+# NASA Mars Document Intelligence Service
 
-[![Offline tests](https://github.com/Rohan-HC/Nasa-Mars_RAG/actions/workflows/ci.yml/badge.svg)](https://github.com/Rohan-HC/Nasa-Mars_RAG/actions/workflows/ci.yml)
+[![Offline CI](https://github.com/Rohan-HC/Nasa-Mars_RAG/actions/workflows/ci.yml/badge.svg)](https://github.com/Rohan-HC/Nasa-Mars_RAG/actions/workflows/ci.yml)
 
-A local Retrieval-Augmented Generation (RAG) application for asking questions about NASA Mars research papers and comparing evidence across documents. It combines a FastAPI backend, PDF ingestion, Chroma vector search, local Ollama models, source citations, deterministic validation, and a browser interface.
+A local, multi-user document-intelligence service for NASA Mars research PDFs. It provides authenticated ingestion, owner-controlled document sharing, durable background indexing, dense/BM25 hybrid retrieval, evidence-linked answers, document comparison, and reproducible quality evaluation without paid APIs.
 
-The project is designed as a transparent engineering prototype: it runs without paid APIs, exposes its quality measurements, and distinguishes citation structure from factual grounding.
-
-## What it does
-
-- Uploads PDF research papers up to 10 MB.
-- Validates that uploads are readable PDFs before indexing.
-- Extracts text, detects reference sections, and creates overlapping chunks.
-- Generates local `nomic-embed-text` embeddings through Ollama.
-- Stores chunks and metadata in a persistent Chroma collection.
-- Detects duplicate documents by SHA-256 and versioned chunk IDs.
-- Retrieves relevant passages for natural-language questions.
-- Generates answers with local `qwen3:1.7b` and numeric source citations.
-- Compares two selected documents using source labels such as `[S1]`.
-- Rejects missing, malformed, or nonexistent citation labels.
-- Returns controlled refusals when generated citation validation fails.
-- Reports retrieval, model, and end-to-end timing.
-- Provides separate liveness and dependency-aware readiness checks.
-- Runs a portable offline test suite in GitHub Actions.
-- Includes a 20-case, source-referenced evaluation dataset and machine-readable results.
+This repository is an engineering prototype for trusted local use. It is not hardened for direct public Internet exposure.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI[Browser UI] --> API[FastAPI]
-
-    API --> UPLOAD[Upload validation]
-    UPLOAD --> PDF[PyMuPDF extraction]
-    PDF --> CHUNK[Section-aware chunking]
-    CHUNK --> EMBED[Ollama nomic-embed-text]
-    EMBED --> DB[(ChromaDB)]
-
-    API --> QUERY[Question or comparison]
-    QUERY --> RETRIEVE[Semantic retrieval]
-    DB --> RETRIEVE
-    RETRIEVE --> PROMPT[Evidence-only prompt]
-    PROMPT --> LLM[Ollama qwen3:1.7b]
+    UI[Browser client] -->|short-lived JWT| API[FastAPI]
+    API --> AUTH[Argon2id identity and ACL]
+    API --> DB[(SQLite catalog)]
+    API --> JOB[(Durable ingestion jobs)]
+    JOB --> WORKER[Independent worker]
+    WORKER --> PDF[PDF extraction and chunking]
+    PDF --> OLLAMA[Local Ollama embeddings]
+    OLLAMA --> VECTOR[(Embedded Chroma)]
+    PDF --> FTS[(SQLite FTS5 BM25)]
+    DB --> RETRIEVAL[Authorised retrieval]
+    VECTOR --> RETRIEVAL
+    FTS --> RETRIEVAL
+    RETRIEVAL --> RRF[Reciprocal Rank Fusion]
+    RRF --> LLM[Local Ollama answer model]
     LLM --> VALIDATE[Citation validation]
-    VALIDATE --> RESPONSE[Answer, sources, validation, timings]
-
-    API --> HEALTH[Liveness and readiness]
-    API --> LOGS[Structured JSON logs]
+    VALIDATE --> API
 ```
 
-### Request flow
+The relational catalog is authoritative for identity, access, active versions, chunks, and job state. Chroma and FTS5 are derived indexes. Retrieval receives a server-derived allowlist before either index is searched and rechecks returned chunk IDs against the active catalog before evidence reaches the model.
 
-1. FastAPI and Pydantic validate request shape and length.
-2. Retrieval embeds the query and searches only chunks marked as document content.
-3. Retrieved passages are labelled and placed in an evidence-only prompt.
-4. The local model generates an answer.
-5. Citation validation checks syntax, source existence, and comparison coverage.
-6. Invalid generated answers are replaced with an insufficient-evidence response.
-7. The API returns the answer, retrieved source metadata, validation state, and timings.
+Replacement indexing is staged: the current version stays searchable while a new version is extracted, embedded, indexed, and verified. A catalog transaction then promotes the new version. Failed replacements leave the previous version active, and reconciliation removes stale derived data after safe promotion or deletion.
 
-Citation validation is deliberately narrow. A valid citation label means the source was retrieved and the label exists; it does **not** prove that the claim is entailed by the source.
+## Capabilities
 
-## Technology stack
+- Argon2id password hashes and short-lived JWT bearer tokens; no default users or signing secrets.
+- Owner-private documents with explicit reader grants and immediate revocation.
+- Generic not-found responses that do not reveal another user's document or job identifiers.
+- PDF signature, parseability, filename, page-count, and 10 MiB upload validation.
+- HTTP `202 Accepted` ingestion and replacement with a separately restartable worker.
+- Stable logical document IDs, immutable version IDs, SHA-256 duplicate detection, and idempotent jobs.
+- Actual SQLite FTS5 `bm25()` keyword search, Chroma dense search, and deterministic RRF hybrid mode.
+- Dense, keyword, and hybrid retrieval modes through the same permission-safe abstraction.
+- Citation-format/existence validation kept separate from claim-level evidence support.
+- Structured JSON logs with request/job IDs and stage timings, excluding prompts, document text, tokens, answers, and storage paths.
+- Deterministic offline integration tests and an opt-in Ollama full-stack smoke test.
 
-| Area | Technology |
-|---|---|
-| API and validation | Python, FastAPI, Pydantic |
-| PDF processing | PyMuPDF |
-| RAG integration | LangChain |
-| Vector database | ChromaDB |
-| Embeddings | `nomic-embed-text` through Ollama |
-| Language model | `qwen3:1.7b` through Ollama |
-| Frontend | HTML, CSS, JavaScript |
-| Testing | pytest, FastAPI TestClient, deterministic fakes |
-| CI | GitHub Actions on Python 3.12 |
+## Technology
 
-## Repository structure
-
-```text
-.
-|-- api.py                     # FastAPI routes, middleware, error responses
-|-- rag_nasa.py                # Question-answering RAG flow
-|-- document_indexer.py        # PDF extraction, chunking, duplicate-safe indexing
-|-- document_comparison.py     # Two-document comparison flow
-|-- citation_validation.py     # Citation syntax and source checks
-|-- rag_runtime.py             # Ollama/retrieval error translation
-|-- health_checks.py           # Readiness dependency checks
-|-- logging_config.py          # Structured JSON logging
-|-- evaluation/                # Dataset, metrics, runner, reports, source verifier
-|-- tests/                     # Portable offline tests
-|-- web/index.html             # Browser interface
-`-- .github/workflows/ci.yml   # Offline CI workflow
-```
+Python 3.12, FastAPI, Pydantic, SQLAlchemy 2, Alembic, SQLite/FTS5, Chroma, LangChain, Ollama (`nomic-embed-text` and `qwen3:1.7b`), PyMuPDF, pytest, Ruff, Docker Compose, and GitHub Actions.
 
 ## Local setup
 
-### Prerequisites
-
-- Git
-- Python 3.12
-- Docker Desktop, or an existing Ollama installation
-
-No paid API key is required.
-
-### 1. Clone and install
+Prerequisites: Python 3.12 and [Ollama](https://ollama.com/) running locally.
 
 ```powershell
 git clone https://github.com/Rohan-HC/Nasa-Mars_RAG.git
 cd Nasa-Mars_RAG
-
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+ollama pull nomic-embed-text
+ollama pull qwen3:1.7b
+$env:NASA_RAG_JWT_SECRET = python -c "import secrets; print(secrets.token_urlsafe(48))"
+alembic upgrade head
+python -m nasa_rag.cli create-user --username alice
 ```
 
-For development and tests, install `requirements-dev.txt` instead; it includes the application requirements.
+Run the API and worker in separate terminals with the same environment:
+
+```powershell
+python -m uvicorn api:app --host 127.0.0.1 --port 8000
+```
+
+```powershell
+python -m nasa_rag.worker
+```
+
+Open `http://127.0.0.1:8000`, sign in, upload a PDF, and wait for the job to become `succeeded` before querying it. Configuration placeholders and retrieval settings are listed in `.env.example`; the application reads environment variables directly and does not load that file automatically.
+
+### Docker Compose
+
+Ollama remains on the host so model files are not duplicated inside containers.
+
+```powershell
+$env:NASA_RAG_JWT_SECRET = python -c "import secrets; print(secrets.token_urlsafe(48))"
+docker compose up --build -d
+docker compose exec api python -m nasa_rag.cli create-user --username alice
+```
+
+The service binds only to `127.0.0.1:8000`. API and worker share the catalog, upload, and Chroma volume. Stop the stack with `docker compose down`; add `--volumes` only when intentionally deleting all local application data.
+
+## API workflow
+
+Interactive schemas are at `/docs`. A minimal PowerShell flow is:
+
+```powershell
+$login = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/auth/token `
+  -ContentType application/json -Body '{"username":"alice","password":"your-password"}'
+$headers = @{ Authorization = "Bearer $($login.access_token)" }
+
+$upload = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/documents/upload `
+  -Headers $headers -Form @{ file = Get-Item .\mars-report.pdf }
+
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/jobs/$($upload.job_id)" -Headers $headers
+
+$body = @{
+  question = "What evidence describes the crater geology?"
+  document_ids = @($upload.document_id)
+  retrieval_mode = "hybrid"
+} | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/ask `
+  -Headers $headers -ContentType application/json -Body $body
+```
+
+Important authenticated endpoints:
+
+| Method and path | Purpose |
+|---|---|
+| `POST /auth/token` | Exchange local credentials for a short-lived token |
+| `GET /auth/me` | Read the current identity |
+| `GET /documents` | List only accessible documents |
+| `POST /documents/upload` | Validate, persist, queue, and return `202` |
+| `PUT /documents/{id}/content` | Queue an owner-only replacement and return `202` |
+| `GET /jobs/{id}` | Read an owner-only ingestion job |
+| `PUT /documents/{id}/permissions/{username}` | Grant reader access as owner |
+| `DELETE /documents/{id}/permissions/{username}` | Revoke reader access as owner |
+| `POST /ask` | Query authorised active versions |
+| `POST /compare/documents` | Compare two authorised documents |
+| `DELETE /documents/{id}` | Delete as owner and clean derived data |
+| `GET /health/live` | Process liveness; no dependency guarantee |
+| `GET /health/ready` | Catalog, vector store, Ollama, and model readiness |
+
+## Tests and quality gates
+
+All CI tests are offline: deterministic embeddings/models and synthetic PDFs replace Ollama and private NASA files.
 
 ```powershell
 python -m pip install -r requirements-dev.txt
-```
-
-### 2. Start Ollama and download the models
-
-```powershell
-docker run -d --name nasa-ollama -p 11434:11434 -v nasa_ollama:/root/.ollama ollama/ollama
-docker exec nasa-ollama ollama pull nomic-embed-text
-docker exec nasa-ollama ollama pull qwen3:1.7b
-```
-
-The application expects Ollama at `http://localhost:11434`.
-
-### 3. Start the API
-
-```powershell
-python -m uvicorn api:app --reload
-```
-
-- Browser interface: `http://127.0.0.1:8000/`
-- OpenAPI documentation: `http://127.0.0.1:8000/docs`
-- Liveness: `http://127.0.0.1:8000/health/live`
-- Readiness: `http://127.0.0.1:8000/health/ready`
-
-Readiness succeeds only when the Chroma path exists, Ollama responds, and both required models are installed.
-
-## API examples
-
-### Upload a PDF
-
-```bash
-curl -X POST http://127.0.0.1:8000/documents/upload \
-  -F "file=@mars-paper.pdf;type=application/pdf"
-```
-
-### List indexed documents
-
-```bash
-curl http://127.0.0.1:8000/documents
-```
-
-### Ask a question
-
-```bash
-curl -X POST http://127.0.0.1:8000/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question":"Which minerals formed through aqueous alteration?"}'
-```
-
-Successful RAG responses contain:
-
-- `answer`
-- `retrieved` source metadata and passage text
-- `validation.citation_valid`
-- `validation.factual_grounding`
-- `timings_ms.retrieval`, `model`, and `total`
-
-### Compare two documents
-
-Use SHA-256 identifiers returned by `/documents`:
-
-```bash
-curl -X POST http://127.0.0.1:8000/compare/documents \
-  -H "Content-Type: application/json" \
-  -d '{
-    "document_a":"<64-character-sha256>",
-    "document_b":"<64-character-sha256>",
-    "question":"Compare the geological interpretations in these papers."
-  }'
-```
-
-### Error contract
-
-Expected failures use a stable envelope and include a correlation ID:
-
-```json
-{
-  "error": {
-    "code": "model_timeout",
-    "message": "The local language model timed out",
-    "request_id": "<request-id>"
-  }
-}
-```
-
-The same ID is returned in the `X-Request-ID` response header. `X-Response-Time-Ms` contains API end-to-end time.
-
-## Automated testing and CI
-
-The portable suite uses generated PDFs and deterministic fakes for Chroma, embeddings, and model generation. It does not require Ollama, local research PDFs, a populated vector database, network access, or secrets.
-
-```powershell
+python -m pip check
+ruff check api.py nasa_rag evaluation tests logging_config.py health_checks.py rag_nasa.py document_comparison.py compare_nasa.py retrieval_embeddings.py migrations
+alembic upgrade head
 python -m pytest -q
 ```
 
-Verified local result for this milestone:
+An explicit full-stack test exercises authentication, asynchronous PDF ingestion, the worker, hybrid retrieval, and Ollama:
 
-```text
-47 passed
+```powershell
+$env:NASA_RAG_FULL_STACK = "1"
+$env:NASA_RAG_SMOKE_USERNAME = "alice"
+$env:NASA_RAG_SMOKE_PASSWORD = "your-password"
+python -m pytest -q tests/test_full_stack.py
 ```
 
-GitHub Actions installs `requirements-dev.txt` on Python 3.12 and runs the same command for pushes and pull requests.
+The GitHub Actions workflow also verifies upgrade/downgrade/upgrade migrations, runs an API smoke test, inventories dependency licenses, and audits known vulnerabilities.
 
-The test suite covers:
+## Evaluation
 
-- API and Pydantic validation
-- valid, malformed, and oversized uploads
-- duplicate detection and failed-index recovery
-- mocked embeddings and model calls
-- missing, malformed, unknown, and cross-document citations
-- controlled refusals for unsupported generated output
-- liveness and readiness behavior
-- timeout and connection-failure translation
-- predictable error envelopes
-- structured logging and timing metadata
-- prompt-injection containment at the prompt boundary
-- evaluation dataset and metric behavior
+The original 20-case V1 dataset and historical outputs remain unchanged. Those historical results used citation-label validation and a lexical evidence proxy; they must not be interpreted as semantic entailment:
 
-Legacy root-level diagnostic scripts are not part of CI because some intentionally use local ignored PDFs or a live Chroma/Ollama environment. CI collects tests only from `tests/`.
-
-## RAG evaluation
-
-The committed dataset at `evaluation/datasets/mars_eval_v1.json` contains 20 cases:
-
-- 9 factual retrieval questions
-- 4 multi-evidence questions
-- 3 document comparisons
-- 2 unanswerable questions
-- 2 hallucination-prone questions
-
-Seventeen positive cases identify a document SHA-256 and one or more verified PDF pages. Three negative cases require refusal and were reviewed for absence from the three-document benchmark corpus.
-
-### Metrics
-
-| Metric | Meaning |
-|---|---|
-| Retrieval Hit@K | At least one expected source page was returned |
-| Source Recall@K | Fraction of verified document-page pairs returned |
-| Answer correctness | Required benchmark concepts appeared in the answer |
-| Citation validity | Citation format and label existence were valid |
-| Evidence support | Required concepts appeared in the cited retrieved passages |
-| Correct refusal | An unanswerable/false-premise question received the configured refusal |
-| Response latency | End-to-end evaluation call time |
-
-Correctness and evidence support are deterministic lexical proxies, not semantic proof or an LLM judge.
-
-### Measured results
-
-These are single live runs against the local three-document Chroma index and local `qwen3:1.7b`. They are reproducible artifacts, not performance guarantees; model output and local latency vary between runs.
-
-| Metric | Baseline | After citation enforcement |
+| Historical V1 measure | Baseline | Post-citation |
 |---|---:|---:|
 | Retrieval Hit@4 | 94.1% | 94.1% |
-| Source Recall@4 | 89.2% | 89.2% |
 | Answer correctness | 70.0% | 65.0% |
-| Citation validity | 95.0% | 100.0% |
-| Evidence-supported answers | 64.7% | 58.8% |
-| Correct refusal | 100.0% | 100.0% |
-| Mean response latency | 10.221 s | 23.262 s |
+| Citation label validity | 95.0% | 100.0% |
+| Lexical evidence proxy | 64.7% | 58.8% |
+| Mean latency | 10.221 s | 23.262 s |
 
-The post-validation run did not demonstrate a general quality or speed improvement. It did demonstrate safer failure behavior: invalid comparison generations and one mixed unsupported-claim/refusal response were withheld and replaced with an insufficient-evidence response. The saved post-citation responses were replayed through the final strict validator so the artifact reflects the final enforcement behavior. A stricter prompt experiment was reverted after it reduced measured correctness and increased latency.
+V2 adds auditable claim units, unsupported/paraphrased claims, misleading citations, synthesis, abstentions, and ambiguous outcomes. Its deterministic nine-case synthetic scorer fixture currently produces 6/7 supported evaluable claims (85.7%), 4/8 citation precision (50.0%), 4/8 citation coverage (50.0%), and 2/2 correct refusals. These validate scoring behavior, not NASA answer quality or application performance. One ambiguous claim is excluded from the faithfulness denominator. Fixture latency values are test inputs, not measured service latency.
 
-Full artifacts:
-
-- `evaluation/results/baseline.json` and `baseline.md`
-- `evaluation/results/post_citation.json` and `post_citation.md`
-
-Run the benchmark:
+Run the deterministic V2 fixture:
 
 ```powershell
-python -m evaluation.run
+python -m evaluation.v2_run --dataset evaluation/datasets/document_intelligence_eval_v2.json
 ```
 
-This requires a live local index and both Ollama models. It overwrites the default baseline output paths unless different `--output` and `--report` paths are supplied.
+The optional Ollama semantic judge is not a ground-truth oracle and has not been used to publish a live NASA benchmark in this repository. Live results require locally available source PDFs, explicit provenance, and human review. Dense-versus-hybrid application quality and p50/p95 latency are not yet measured; a deterministic retrieval unit fixture demonstrates fusion behavior only.
 
-If the three source PDFs are available under `data/`, verify positive cases against the declared hashed PDF pages:
+## Reliability and security boundaries
 
-```powershell
-python -m evaluation.verify_sources
-```
+- Access is denied by default and enforced before both dense and BM25 retrieval, then revalidated against active catalog rows. Model output and client-supplied owner IDs never grant access.
+- SQLite transactions and worker leases provide durable single-host job recovery. This design is not a horizontally scalable distributed queue and SQLite/Chroma do not provide distributed atomic transactions.
+- Staged activation preserves the previous answerable version on extraction, Ollama, or index failures. Derived-store reconciliation is idempotent but should still be backed up and monitored for important data.
+- JWTs have short expirations but no refresh-token or per-token revocation store. Disabling a user is checked on every authenticated request. Rate limits are in-memory and therefore per API process.
+- There is no TLS termination, malware scanning, OCR, sandboxed PDF parser, enterprise identity provider, or public-service abuse protection. Place a reviewed reverse proxy and stronger operational controls in front of any non-local deployment.
+- PDF text and embedded instructions are untrusted evidence. Prompts instruct the model not to follow document commands, and regression tests cover prompt-injection text, but model-level prompt injection cannot be guaranteed away.
+- Chroma 1.5.9 has published 2026 advisories for its HTTP server with no fixed version listed at the time of this release check. This application uses only embedded `PersistentClient` and does not start or expose Chroma's server; CI exceptions are limited to those four IDs and any new advisory fails the audit. Upgrade immediately when a compatible fix is available.
+- PyMuPDF is dual-licensed under AGPL-3.0 or a commercial Artifex license. Anyone distributing or operating a modified network service must review and satisfy those terms; this repository does not claim permissive-license compatibility.
+- Generated answers can still be wrong. Citation syntax, citation existence, and semantic claim support are separate measurements; a real citation label alone is not proof of factual correctness.
 
-The research PDFs and local vector data are intentionally excluded from Git, so source verification cannot run from a clean clone until the matching documents are supplied and indexed.
-
-## Reliability and observability
-
-- Model calls have a 120-second client timeout.
-- Embedding calls have a 30-second client timeout.
-- Connection and timeout failures map to stable API error codes.
-- Readiness opens the Chroma collection and verifies at least one chunk with required metadata.
-- Failed uploads and indexing attempts remove partial or temporary files.
-- Re-indexing preserves the previous version until new chunk IDs verify.
-- Duplicate uploads do not leave redundant PDF copies.
-- Every API response includes a request ID and end-to-end response time.
-- RAG operations log retrieval, model, and total latency as structured JSON.
-- Logs include operational metadata, not questions, prompts, or document passages.
-
-## Security considerations
-
-Uploaded content is treated as untrusted evidence, not instructions. The system prompt reinforces this boundary, and tests verify that document prompt-injection text remains in the evidence message rather than the system message.
-
-Additional controls include:
-
-- 10 MB streaming upload limit
-- PDF extension and parser validation
-- UUID-based storage paths rather than user filenames
-- 1,000-character question limits
-- generic internal error responses without exception details
-- cleanup after invalid files and failed indexing
-
-This is a local, unauthenticated application. It does not provide authentication, authorization, tenant isolation, rate limiting, TLS termination, malware scanning, or a hardened parser sandbox. Do not expose it directly to the public internet. Prompt injection cannot be eliminated solely with prompting; retrieved evidence and model answers must remain untrusted.
-
-## Known limitations
-
-- A valid citation ID does not guarantee factual correctness or entailment.
-- The small local model can omit concepts, choose the wrong retrieved passage, or produce unsupported claims.
-- Retrieval is dense semantic search without a reranker or hybrid keyword stage.
-- PDF reference-section detection is heuristic.
-- Scanned PDFs require OCR outside the current ingestion path.
-- Tables, figures, and complex layouts may lose information during text extraction.
-- The lexical evaluation metrics do not capture paraphrases perfectly.
-- The 20-case benchmark covers three documents and is not a broad scientific QA benchmark.
-- Chroma persistence is intended for local single-user operation, not concurrent multi-tenant service.
-- Latency depends heavily on local hardware, model warm state, and document context size.
-- NASA PDFs and generated local vector data are not distributed in the repository.
-
-## Demonstration checklist
-
-1. Start Ollama and confirm `/health/ready` returns `ready`.
-2. Start FastAPI and open the browser interface.
-3. Upload one PDF and show the returned SHA-256, page count, and chunk count.
-4. Upload the same PDF again and show `already_indexed`.
-5. Ask a factual question and inspect the answer, source pages, validation, and timings.
-6. Upload a second paper and compare the two SHA-256 document IDs.
-7. Submit an unanswerable question and show the controlled refusal.
-8. Run `python -m pytest -q` to demonstrate the offline suite.
-9. Open the evaluation reports and explain one retrieval failure separately from one answer-generation failure.
-
-## Project status
-
-This repository is a tested local applied-AI/backend engineering project. It demonstrates PDF ingestion, vector retrieval, local model integration, evaluation, citation enforcement, failure handling, structured observability, and CI. It has not been deployed or validated as a production, public, or safety-critical service.
+Do not commit `.env`, tokens, users, uploaded PDFs, SQLite databases, Chroma data, model caches, or private evaluation annotations.

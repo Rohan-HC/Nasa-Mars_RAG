@@ -1,6 +1,5 @@
 from citation_validation import validate_citations
 
-
 NUMERIC_SOURCES = [
     {"label": 1, "title": "mars.pdf", "page": 1, "text": "Olivine."},
     {"label": 2, "title": "mars.pdf", "page": 2, "text": "Carbonate."},

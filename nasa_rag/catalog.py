@@ -4,10 +4,10 @@ from sqlalchemy import delete, exists, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from nasa_rag.models import (
+    Chunk,
     Document,
     DocumentPermission,
     DocumentVersion,
-    Chunk,
     User,
     utc_now,
 )

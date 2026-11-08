@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 import requests
 
-
 VALID_VERDICTS = {"supported", "unsupported", "ambiguous"}
 
 

@@ -1,11 +1,11 @@
 import logging
 from time import perf_counter
 
-from document_catalog import list_documents
-from search_nasa import search_nasa
-from rag_nasa import llm
 from comparison_checks import validate_comparison
+from document_catalog import list_documents
+from rag_nasa import llm
 from rag_runtime import invoke_model, retrieve
+from search_nasa import search_nasa
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +74,7 @@ def compare_documents(
     for role, file_hash in zip(
         ("A", "B"),
         (document_a, document_b),
+        strict=True,
     ):
         filename = catalog[file_hash]["filename"]
 

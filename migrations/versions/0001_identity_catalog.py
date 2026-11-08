@@ -1,8 +1,7 @@
 """Create users, documents, versions and ACL grants."""
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "0001_identity_catalog"
 down_revision = None
