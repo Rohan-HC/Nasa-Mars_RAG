@@ -15,8 +15,8 @@ jobs:
       NASA_RAG_JWT_SECRET: tests-only-ci-secret-that-is-at-least-thirty-two-bytes
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
