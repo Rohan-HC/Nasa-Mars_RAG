@@ -6,6 +6,12 @@ A local, multi-user document-intelligence service for NASA Mars research PDFs. I
 
 This repository is an engineering prototype for trusted local use. It is not hardened for direct public Internet exposure.
 
+## Project preview
+
+![NASA Mars Research Assistant authenticated document workspace](docs/screenshots/nasa-mars-research-assistant.png)
+
+The browser workspace brings private PDF ingestion, hybrid retrieval, source-linked answers, and two-document comparison into one authenticated interface.
+
 ## Architecture
 
 ```mermaid
